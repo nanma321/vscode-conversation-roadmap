@@ -20,6 +20,15 @@ export const CURRENT_SCHEMA_VERSION = 1;
 /** Lifecycle status of a roadmap node, set by summarization (Phase 4) or the user (Phase 5/6). */
 export type NodeStatus = "open" | "in-progress" | "done" | "blocked";
 
+/**
+ * What kind of thing a node represents, as extracted by incremental
+ * summarization (Phase 4): a topic (the default, a conversational thread)
+ * or one of the specific item categories the summarizer looks for within a
+ * topic. Optional/absent on nodes persisted before this field existed,
+ * which are treated as `"topic"` nodes.
+ */
+export type NodeType = "topic" | "decision" | "question" | "task" | "outcome" | "blocker";
+
 /** How an edge was created; used to distinguish semantic graph structure from pure layout (Phase 6). */
 export type EdgeKind = "topic" | "branch" | "manual";
 
@@ -81,6 +90,12 @@ export interface RoadmapNode {
   summary: string;
   /** Current lifecycle status. */
   status: NodeStatus;
+  /**
+   * What kind of thing this node represents (topic, decision, question, task,
+   * outcome, or blocker). Optional for backward compatibility with documents
+   * persisted before Phase 4; absent means `"topic"`.
+   */
+  nodeType?: NodeType;
   /** Free-form user tags for filtering/search (Phase 8). */
   tags: string[];
   /** User-authored notes, distinct from the (possibly AI-generated) summary. Never overwritten automatically. */

@@ -18,6 +18,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   EdgeKind,
   NodeStatus,
+  NodeType,
   Roadmap,
   RoadmapDocument,
   RoadmapEdge,
@@ -35,6 +36,7 @@ export const SCHEMA_DESCRIPTION = {
 } as const;
 
 const NODE_STATUSES: readonly NodeStatus[] = ["open", "in-progress", "done", "blocked"];
+const NODE_TYPES: readonly NodeType[] = ["topic", "decision", "question", "task", "outcome", "blocker"];
 const EDGE_KINDS: readonly EdgeKind[] = ["topic", "branch", "manual"];
 
 /** The result of validating an unknown value against the roadmap document schema. */
@@ -115,6 +117,10 @@ function validateNode(value: unknown, path: string, errors: string[]): value is 
   }
   if (typeof value.status !== "string" || !NODE_STATUSES.includes(value.status as NodeStatus)) {
     pushError(errors, `${path}.status`, `must be one of ${NODE_STATUSES.join(", ")}`);
+    ok = false;
+  }
+  if (value.nodeType !== undefined && !NODE_TYPES.includes(value.nodeType as NodeType)) {
+    pushError(errors, `${path}.nodeType`, `must be one of ${NODE_TYPES.join(", ")} when present`);
     ok = false;
   }
   if (!Array.isArray(value.tags) || !value.tags.every((tag) => typeof tag === "string")) {
