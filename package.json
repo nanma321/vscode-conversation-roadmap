@@ -1,0 +1,46 @@
+{
+  "name": "conversation-roadmap",
+  "displayName": "Conversation Roadmap",
+  "description": "Captures @roadmap chat participant conversations and renders them as a graph.",
+  "version": "0.0.1",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "roadmap.participant",
+        "name": "roadmap",
+        "fullName": "Roadmap",
+        "description": "Captures conversation turns for the roadmap graph.",
+        "isSticky": true
+      }
+    ],
+    "commands": [
+      {
+        "command": "conversationRoadmap.openGraph",
+        "title": "Roadmap: Open Graph"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "ts-mocha -p ./tsconfig.json test/**/*.test.ts --timeout 10000"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.90.0",
+    "mocha": "^10.3.0",
+    "ts-mocha": "^10.0.0",
+    "typescript": "^5.4.0"
+  }
+}
