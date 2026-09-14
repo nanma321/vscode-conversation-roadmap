@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { TurnStore } from "./turnStore";
 import { registerRoadmapParticipant } from "./chatParticipant";
-import { showGraphWebview } from "./webviewPanel";
+import { showGraphWebview, updateGraph } from "./webviewPanel";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Storage lives under globalStorageUri so captured turns persist across
@@ -9,6 +9,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Graph" command re-reading this same directory after a restart).
   const store = new TurnStore(context.globalStorageUri.fsPath);
   await store.load();
+
+  // Live refresh: whenever a new turn is captured, push it into the open graph
+  // panel (a no-op if the panel isn't open) so the graph updates in real time.
+  context.subscriptions.push({ dispose: store.onDidChange((turns) => updateGraph(turns)) });
 
   registerRoadmapParticipant(context, store);
 

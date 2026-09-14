@@ -11,6 +11,7 @@ function makeTempDir(): string {
 function sampleTurn(overrides: Partial<TurnRecord> = {}): TurnRecord {
   return {
     id: "turn-1",
+    sessionId: "session-1",
     timestamp: new Date().toISOString(),
     request: "What should our roadmap look like?",
     response: "Here is a proposed roadmap.",
@@ -94,5 +95,54 @@ describe("TurnStore", () => {
     const parsed = JSON.parse(raw);
     assert.strictEqual(parsed.version, 1);
     assert.strictEqual(parsed.turns.length, 1);
+  });
+
+  it("notifies onDidChange listeners with the latest turns when a turn is appended", async () => {
+    const dir = makeTempDir();
+    const store = new TurnStore(dir);
+    await store.load();
+
+    const received: TurnRecord[][] = [];
+    const unsubscribe = store.onDidChange((turns) => received.push(turns));
+
+    await store.append(sampleTurn({ id: "turn-1" }));
+    await store.append(sampleTurn({ id: "turn-2" }));
+
+    assert.strictEqual(received.length, 2, "listener should fire once per append");
+    assert.strictEqual(received[0].length, 1);
+    assert.strictEqual(received[1].length, 2);
+    assert.strictEqual(received[1][1].id, "turn-2");
+
+    // After unsubscribing, further appends must not notify the listener.
+    unsubscribe();
+    await store.append(sampleTurn({ id: "turn-3" }));
+    assert.strictEqual(received.length, 2, "listener should not fire after unsubscribe");
+  });
+
+  it("normalizes turns persisted without a sessionId to the legacy session on load", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "turns.json");
+    // Simulate a file written before sessions existed (no sessionId field).
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        turns: [
+          {
+            id: "old-1",
+            timestamp: new Date().toISOString(),
+            request: "legacy request",
+            response: "legacy response",
+            completed: true,
+          },
+        ],
+      }),
+      "utf8"
+    );
+
+    const store = new TurnStore(dir);
+    const turns = await store.load();
+    assert.strictEqual(turns.length, 1);
+    assert.strictEqual(turns[0].sessionId, "legacy");
   });
 });

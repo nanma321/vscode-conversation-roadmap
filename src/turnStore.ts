@@ -13,6 +13,13 @@ import * as path from "path";
 export interface TurnRecord {
   /** Stable identifier for this turn (spike-level: not yet a full session model, see Phase 3). */
   id: string;
+  /**
+   * Identifier grouping turns that belong to the same chat conversation. A new
+   * chat starts a new session (see `chatParticipant.ts`), so the graph can show
+   * a fresh roadmap per chat while keeping older sessions selectable. Turns
+   * persisted before sessions existed are normalized to `"legacy"` on load.
+   */
+  sessionId: string;
   /** ISO-8601 timestamp of when the turn was recorded. */
   timestamp: string;
   /** The user's request text, exactly as received by the participant handler. */
@@ -22,6 +29,9 @@ export interface TurnRecord {
   /** Whether the response completed successfully (false for cancelled/errored turns). */
   completed: boolean;
 }
+
+const LEGACY_SESSION_ID = "legacy";
+
 
 const STORE_FILE_NAME = "turns.json";
 
@@ -40,9 +50,32 @@ export class TurnStore {
   private readonly filePath: string;
   private turns: TurnRecord[] = [];
   private loaded = false;
+  private readonly changeListeners: Array<(turns: TurnRecord[]) => void> = [];
 
   constructor(private readonly storageDir: string) {
     this.filePath = path.join(storageDir, STORE_FILE_NAME);
+  }
+
+  /**
+   * Registers a listener invoked whenever the set of turns changes (e.g. a new
+   * turn is appended). Returns an unsubscribe function. Used by the graph
+   * Webview to refresh in real time as `@roadmap` turns are captured.
+   */
+  onDidChange(listener: (turns: TurnRecord[]) => void): () => void {
+    this.changeListeners.push(listener);
+    return () => {
+      const index = this.changeListeners.indexOf(listener);
+      if (index !== -1) {
+        this.changeListeners.splice(index, 1);
+      }
+    };
+  }
+
+  private emitChange(): void {
+    const snapshot = this.getAll();
+    for (const listener of this.changeListeners) {
+      listener(snapshot);
+    }
   }
 
   /** Loads persisted turns from disk into memory. Safe to call multiple times. */
@@ -51,7 +84,13 @@ export class TurnStore {
     try {
       const raw = await fs.promises.readFile(this.filePath, "utf8");
       const parsed = JSON.parse(raw) as StoreFileShape;
-      this.turns = Array.isArray(parsed.turns) ? parsed.turns : [];
+      const loaded = Array.isArray(parsed.turns) ? parsed.turns : [];
+      // Normalize turns persisted before sessions existed so they group under a
+      // single "legacy" session rather than appearing session-less.
+      this.turns = loaded.map((turn) => ({
+        ...turn,
+        sessionId: turn.sessionId || LEGACY_SESSION_ID,
+      }));
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;
       if (code === "ENOENT") {
@@ -78,6 +117,7 @@ export class TurnStore {
     }
     this.turns.push({ ...turn });
     await this.persist();
+    this.emitChange();
   }
 
   private async persist(): Promise<void> {

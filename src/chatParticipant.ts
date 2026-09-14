@@ -12,10 +12,31 @@ import * as vscode from "vscode";
 import { TurnStore } from "./turnStore";
 
 let turnCounter = 0;
+let sessionCounter = 0;
+// Tracks the session id for the conversation currently being handled. Reset to a
+// new id whenever a chat has no prior `@roadmap` history (i.e. a new chat), so
+// each conversation forms its own roadmap while remaining individually selectable.
+let currentSessionId: string | undefined;
 
 function nextTurnId(): string {
   turnCounter += 1;
   return `turn-${Date.now()}-${turnCounter}`;
+}
+
+/**
+ * Resolves the session id for an incoming request. A new session starts when the
+ * chat has no prior `@roadmap` turns in its history, or when we have no in-memory
+ * session (e.g. the first turn after the extension activated mid-conversation).
+ * Only history involving `@roadmap` is ever visible here, preserving the Phase 1
+ * limitation that other participants' messages are inaccessible.
+ */
+function resolveSessionId(chatContext: vscode.ChatContext): string {
+  const hasHistory = Array.isArray(chatContext.history) && chatContext.history.length > 0;
+  if (!hasHistory || !currentSessionId) {
+    sessionCounter += 1;
+    currentSessionId = `session-${Date.now()}-${sessionCounter}`;
+  }
+  return currentSessionId;
 }
 
 export function registerRoadmapParticipant(
@@ -24,11 +45,12 @@ export function registerRoadmapParticipant(
 ): vscode.ChatParticipant {
   const handler: vscode.ChatRequestHandler = async (
     request: vscode.ChatRequest,
-    _chatContext: vscode.ChatContext,
+    chatContext: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken
   ): Promise<void> => {
     const turnId = nextTurnId();
+    const sessionId = resolveSessionId(chatContext);
     let responseText = "";
     let completed = false;
 
@@ -58,6 +80,7 @@ export function registerRoadmapParticipant(
     } finally {
       await store.append({
         id: turnId,
+        sessionId,
         timestamp: new Date().toISOString(),
         request: request.prompt,
         response: responseText,
