@@ -9,9 +9,26 @@
 import * as fs from "fs";
 import * as path from "path";
 
+/**
+ * A reference (e.g. a file, selection, or other attached context) that was
+ * part of a captured request. Only reference value kinds the extension
+ * knows how to serialize safely are ever stored here; see
+ * `turnCapture.ts#extractSupportedReferences` for the filtering logic.
+ */
+export interface TurnReference {
+  /** Identifier for this kind of reference, as assigned by VS Code. */
+  id: string;
+  /** Optional human-readable description of the reference, if supplied. */
+  description?: string;
+  /** Which supported shape the original reference value had. */
+  kind: "text" | "uri" | "location";
+  /** Serialized textual representation of the reference's value. */
+  value: string;
+}
+
 /** A single captured request/response exchange with the `@roadmap` participant. */
 export interface TurnRecord {
-  /** Stable identifier for this turn (spike-level: not yet a full session model, see Phase 3). */
+  /** Stable identifier for this turn, assigned once when the turn is captured (Phase 3). */
   id: string;
   /**
    * Identifier grouping turns that belong to the same chat conversation. A new
@@ -28,6 +45,11 @@ export interface TurnRecord {
   response: string;
   /** Whether the response completed successfully (false for cancelled/errored turns). */
   completed: boolean;
+  /**
+   * Supported references attached to the request (e.g. files or selections).
+   * Turns persisted before references were captured are normalized to `[]` on load.
+   */
+  references: TurnReference[];
 }
 
 const LEGACY_SESSION_ID = "legacy";
@@ -85,11 +107,14 @@ export class TurnStore {
       const raw = await fs.promises.readFile(this.filePath, "utf8");
       const parsed = JSON.parse(raw) as StoreFileShape;
       const loaded = Array.isArray(parsed.turns) ? parsed.turns : [];
-      // Normalize turns persisted before sessions existed so they group under a
-      // single "legacy" session rather than appearing session-less.
+      // Normalize turns persisted before sessions/references existed so they
+      // group under a single "legacy" session and have a well-formed
+      // (empty) references array rather than appearing session-less or
+      // throwing when consumers iterate over `references`.
       this.turns = loaded.map((turn) => ({
         ...turn,
         sessionId: turn.sessionId || LEGACY_SESSION_ID,
+        references: Array.isArray(turn.references) ? turn.references : [],
       }));
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;

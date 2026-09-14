@@ -10,6 +10,14 @@
  */
 import * as vscode from "vscode";
 import { TurnStore } from "./turnStore";
+import {
+  buildTurnRecord,
+  cancelledOutcome,
+  extractSupportedReferences,
+  failedOutcome,
+  successOutcome,
+  TurnOutcome,
+} from "./turnCapture";
 
 let turnCounter = 0;
 let sessionCounter = 0;
@@ -51,8 +59,10 @@ export function registerRoadmapParticipant(
   ): Promise<void> => {
     const turnId = nextTurnId();
     const sessionId = resolveSessionId(chatContext);
+    const timestamp = new Date().toISOString();
+    const references = extractSupportedReferences(request.references);
     let responseText = "";
-    let completed = false;
+    let outcome: TurnOutcome;
 
     try {
       const [model] = await vscode.lm.selectChatModels({ vendor: "copilot" });
@@ -60,6 +70,9 @@ export function registerRoadmapParticipant(
         stream.markdown(
           "No language model is available to respond. This turn is still recorded for the roadmap graph."
         );
+        // No model means the request could not actually be answered; this is
+        // an explicit failure, not a silently "completed" empty response.
+        outcome = failedOutcome(responseText, new Error("No language model is available"));
       } else {
         const messages = [vscode.LanguageModelChatMessage.User(request.prompt)];
         const chatResponse = await model.sendRequest(messages, {}, token);
@@ -70,22 +83,26 @@ export function registerRoadmapParticipant(
           responseText += fragment;
           stream.markdown(fragment);
         }
+        outcome = token.isCancellationRequested ? cancelledOutcome(responseText) : successOutcome(responseText);
       }
-      completed = !token.isCancellationRequested;
     } catch (err) {
-      // Model failures are logged as incomplete turns rather than dropped,
-      // so provenance of the failure is preserved (see Key Engineering Principles).
-      completed = false;
-      responseText = responseText || `Error: ${(err as Error).message}`;
+      // Model failures and cancellations surfaced as errors are logged as
+      // incomplete turns rather than dropped, so provenance of the failure
+      // is preserved (see Key Engineering Principles). Cancellation always
+      // takes precedence so a user-cancelled turn is never recorded as a
+      // model failure.
+      outcome = token.isCancellationRequested ? cancelledOutcome(responseText) : failedOutcome(responseText, err);
     } finally {
-      await store.append({
-        id: turnId,
-        sessionId,
-        timestamp: new Date().toISOString(),
-        request: request.prompt,
-        response: responseText,
-        completed,
-      });
+      await store.append(
+        buildTurnRecord({
+          id: turnId,
+          sessionId,
+          timestamp,
+          request: request.prompt,
+          outcome: outcome!,
+          references,
+        })
+      );
     }
   };
 

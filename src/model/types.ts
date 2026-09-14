@@ -49,6 +49,20 @@ export interface Turn {
   response: string;
   /** Whether the response completed successfully (false for cancelled/errored turns). */
   completed: boolean;
+  /** Supported references (e.g. files or selections) attached to the request. Matches `TurnRecord.references`. */
+  references: TurnReference[];
+}
+
+/** Matches `TurnRecord`'s `TurnReference` shape (see `turnStore.ts`) at the domain-model level. */
+export interface TurnReference {
+  /** Identifier for this kind of reference, as assigned by VS Code. */
+  id: string;
+  /** Optional human-readable description of the reference, if supplied. */
+  description?: string;
+  /** Which supported shape the original reference value had. */
+  kind: "text" | "uri" | "location";
+  /** Serialized textual representation of the reference's value. */
+  value: string;
 }
 
 /** 2D layout position for a node in the graph Webview (Phase 5). Manual positions must never be silently overwritten. */

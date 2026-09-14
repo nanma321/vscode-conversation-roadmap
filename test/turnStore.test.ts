@@ -16,6 +16,7 @@ function sampleTurn(overrides: Partial<TurnRecord> = {}): TurnRecord {
     request: "What should our roadmap look like?",
     response: "Here is a proposed roadmap.",
     completed: true,
+    references: [],
     ...overrides,
   };
 }
@@ -144,5 +145,54 @@ describe("TurnStore", () => {
     const turns = await store.load();
     assert.strictEqual(turns.length, 1);
     assert.strictEqual(turns[0].sessionId, "legacy");
+  });
+
+  it("normalizes turns persisted without a references field to an empty array on load", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "turns.json");
+    // Simulate a file written before references were captured (no references field).
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        turns: [
+          {
+            id: "old-1",
+            sessionId: "session-1",
+            timestamp: new Date().toISOString(),
+            request: "legacy request",
+            response: "legacy response",
+            completed: true,
+          },
+        ],
+      }),
+      "utf8"
+    );
+
+    const store = new TurnStore(dir);
+    const turns = await store.load();
+    assert.strictEqual(turns.length, 1);
+    assert.deepStrictEqual(turns[0].references, []);
+  });
+
+  it("stores and reloads supported references attached to a turn", async () => {
+    const dir = makeTempDir();
+    const store = new TurnStore(dir);
+    await store.load();
+    await store.append(
+      sampleTurn({
+        id: "turn-with-refs",
+        references: [
+          { id: "ref-1", description: "an attached file", kind: "uri", value: "file:///tmp/example.ts" },
+        ],
+      })
+    );
+
+    const reloadedStore = new TurnStore(dir);
+    const reloaded = await reloadedStore.load();
+    assert.strictEqual(reloaded.length, 1);
+    assert.deepStrictEqual(reloaded[0].references, [
+      { id: "ref-1", description: "an attached file", kind: "uri", value: "file:///tmp/example.ts" },
+    ]);
   });
 });
