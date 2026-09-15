@@ -4,6 +4,7 @@ import { RoadmapStore } from "./model/roadmapStore";
 import { registerRoadmapParticipant } from "./chatParticipant";
 import { showGraphWebview, updateGraph, resumeSelectedNode } from "./webviewPanel";
 import { exportMarkdownOutlineCommand, exportRoadmapCommand, importRoadmapCommand } from "./importExportCommands";
+import { deleteAllDataCommand } from "./dataDeletion";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Storage lives under globalStorageUri so captured turns persist across
@@ -73,6 +74,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   );
   context.subscriptions.push(exportMarkdownOutlineCmd);
+
+  // Phase 9: user-initiated, irreversible local data deletion (turns + roadmap graphs).
+  const deleteAllDataCmd = vscode.commands.registerCommand(
+    "conversationRoadmap.deleteAllData",
+    async () => {
+      await deleteAllDataCommand(store, roadmapStore);
+    }
+  );
+  context.subscriptions.push(deleteAllDataCmd);
 }
 
 export function deactivate(): void {

@@ -25,6 +25,7 @@ import { createDefaultSettings, Roadmap, RoadmapDocument } from "./model/types";
 import { RoadmapHistory } from "./model/roadmapHistory";
 import { applyWebviewMessage, HostToWebviewMessage, validateWebviewMessage } from "./webviewMessages";
 import { buildResumeContext, formatResumeQuery, ResumeSourceTurn } from "./resume/resumeContext";
+import { buildContentSecurityPolicy } from "./webviewCsp";
 
 /** Single roadmap this graph Webview reads/writes for now; multi-roadmap selection is a later phase. */
 const DEFAULT_ROADMAP_ID = "default";
@@ -103,7 +104,7 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, roadmap: 
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};" />
+  <meta http-equiv="Content-Security-Policy" content="${buildContentSecurityPolicy(webview.cspSource, nonce)}" />
   <link rel="stylesheet" href="${styleUri}" />
   <title>Roadmap Graph</title>
 </head>

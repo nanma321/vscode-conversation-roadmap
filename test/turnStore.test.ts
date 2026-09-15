@@ -195,4 +195,55 @@ describe("TurnStore", () => {
       { id: "ref-1", description: "an attached file", kind: "uri", value: "file:///tmp/example.ts" },
     ]);
   });
+
+  it("recovers from an orphaned temp file left by an interrupted write, without touching the real file", async () => {
+    const dir = makeTempDir();
+    const store = new TurnStore(dir);
+    await store.load();
+    await store.append(sampleTurn({ id: "turn-1" }));
+
+    // Simulate a crash between the temp-file write and the rename in persist().
+    const orphanTempPath = path.join(dir, "turns.json.tmp-99999-123");
+    fs.writeFileSync(orphanTempPath, JSON.stringify({ version: 1, turns: [] }), "utf8");
+    assert.ok(fs.existsSync(orphanTempPath));
+
+    const reloadedStore = new TurnStore(dir);
+    const reloaded = await reloadedStore.load();
+
+    // The real file (with its previously persisted turn) is unaffected...
+    assert.strictEqual(reloaded.length, 1);
+    assert.strictEqual(reloaded[0].id, "turn-1");
+    // ...and the orphaned temp file has been cleaned up.
+    assert.ok(!fs.existsSync(orphanTempPath), "orphaned temp file should be removed on load");
+  });
+
+  it("deleteAll removes turns.json from disk, clears in-memory state, and notifies listeners with an empty list", async () => {
+    const dir = makeTempDir();
+    const store = new TurnStore(dir);
+    await store.load();
+    await store.append(sampleTurn({ id: "turn-1" }));
+
+    const received: TurnRecord[][] = [];
+    store.onDidChange((turns) => received.push(turns));
+
+    await store.deleteAll();
+
+    assert.deepStrictEqual(store.getAll(), []);
+    assert.ok(!fs.existsSync(path.join(dir, "turns.json")), "turns.json should be deleted");
+    assert.strictEqual(received.length, 1);
+    assert.deepStrictEqual(received[0], []);
+
+    // A subsequent load from a fresh instance confirms nothing survives on disk.
+    const reloadedStore = new TurnStore(dir);
+    const reloaded = await reloadedStore.load();
+    assert.strictEqual(reloaded.length, 0);
+  });
+
+  it("deleteAll is safe to call when no file has ever been written", async () => {
+    const dir = makeTempDir();
+    const store = new TurnStore(dir);
+    await store.load();
+    await assert.doesNotReject(() => store.deleteAll());
+    assert.deepStrictEqual(store.getAll(), []);
+  });
 });

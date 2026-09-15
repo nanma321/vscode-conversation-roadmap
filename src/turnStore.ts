@@ -104,6 +104,7 @@ export class TurnStore {
   /** Loads persisted turns from disk into memory. Safe to call multiple times. */
   async load(): Promise<TurnRecord[]> {
     await fs.promises.mkdir(this.storageDir, { recursive: true });
+    await this.cleanupOrphanedTempFiles();
     try {
       const raw = await fs.promises.readFile(this.filePath, "utf8");
       const parsed = JSON.parse(raw) as StoreFileShape;
@@ -152,5 +153,52 @@ export class TurnStore {
     const tempPath = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
     await fs.promises.writeFile(tempPath, JSON.stringify(payload, null, 2), "utf8");
     await fs.promises.rename(tempPath, this.filePath);
+  }
+
+  /**
+   * Removes any leftover `turns.json.tmp-*` file from `storageDir`. Such a
+   * file can only exist if a previous write was interrupted (e.g. the
+   * process crashed or the window was force-closed) between the temp-file
+   * write and the atomic rename that replaces `turns.json` - the rename
+   * itself is a single filesystem operation, so `turns.json` can never be
+   * left partially written. Run at the start of every `load()` so recovery
+   * happens automatically the next time the extension starts, without ever
+   * touching the real `turns.json`.
+   */
+  private async cleanupOrphanedTempFiles(): Promise<void> {
+    let entries: string[];
+    try {
+      entries = await fs.promises.readdir(this.storageDir);
+    } catch {
+      return;
+    }
+    const prefix = `${STORE_FILE_NAME}.tmp-`;
+    await Promise.all(
+      entries
+        .filter((name) => name.startsWith(prefix))
+        .map((name) => fs.promises.unlink(path.join(this.storageDir, name)).catch(() => undefined))
+    );
+  }
+
+  /**
+   * Permanently deletes all locally stored turns: clears in-memory state,
+   * removes `turns.json` (and any leftover temp file) from disk, and
+   * notifies listeners with the now-empty set. Used by the "delete all
+   * local data" command (Phase 9); irreversible, so callers must confirm
+   * with the user before calling this.
+   */
+  async deleteAll(): Promise<void> {
+    this.turns = [];
+    this.loaded = true;
+    await this.cleanupOrphanedTempFiles();
+    try {
+      await fs.promises.unlink(this.filePath);
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code !== "ENOENT") {
+        throw err;
+      }
+    }
+    this.emitChange();
   }
 }

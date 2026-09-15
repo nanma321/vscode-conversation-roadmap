@@ -42,6 +42,10 @@
       {
         "command": "conversationRoadmap.exportMarkdownOutline",
         "title": "Roadmap: Export Outline (Markdown)"
+      },
+      {
+        "command": "conversationRoadmap.deleteAllData",
+        "title": "Roadmap: Delete All Local Data"
       }
     ]
   },

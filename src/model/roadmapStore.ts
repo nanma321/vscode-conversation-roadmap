@@ -52,6 +52,7 @@ export class RoadmapStore {
    */
   async load(): Promise<RoadmapDocument> {
     await fs.promises.mkdir(this.storageDir, { recursive: true });
+    await this.cleanupOrphanedTempFiles();
     try {
       const raw = await fs.promises.readFile(this.filePath, "utf8");
       const parsed: unknown = JSON.parse(raw);
@@ -105,6 +106,52 @@ export class RoadmapStore {
     const tempPath = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
     await fs.promises.writeFile(tempPath, JSON.stringify(document, null, 2), "utf8");
     await fs.promises.rename(tempPath, this.filePath);
+  }
+
+  /**
+   * Removes any leftover `roadmaps.json.tmp-*` file from `storageDir`. Such
+   * a file can only exist if a previous `save()` was interrupted (e.g. the
+   * process crashed or the window was force-closed) between the temp-file
+   * write and the atomic rename that replaces `roadmaps.json` - the rename
+   * itself is a single filesystem operation, so `roadmaps.json` can never be
+   * left partially written. Run at the start of every `load()` so recovery
+   * happens automatically the next time the extension starts, without ever
+   * touching the real `roadmaps.json`.
+   */
+  private async cleanupOrphanedTempFiles(): Promise<void> {
+    let entries: string[];
+    try {
+      entries = await fs.promises.readdir(this.storageDir);
+    } catch {
+      return;
+    }
+    const prefix = `${STORE_FILE_NAME}.tmp-`;
+    await Promise.all(
+      entries
+        .filter((name) => name.startsWith(prefix))
+        .map((name) => fs.promises.unlink(path.join(this.storageDir, name)).catch(() => undefined))
+    );
+  }
+
+  /**
+   * Permanently deletes the locally stored roadmap document: resets
+   * in-memory state to an empty document and removes `roadmaps.json` (and
+   * any leftover temp file) from disk. Used by the "delete all local data"
+   * command (Phase 9); irreversible, so callers must confirm with the user
+   * before calling this.
+   */
+  async deleteAll(): Promise<void> {
+    this.document = createEmptyDocument();
+    this.loaded = true;
+    await this.cleanupOrphanedTempFiles();
+    try {
+      await fs.promises.unlink(this.filePath);
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code !== "ENOENT") {
+        throw err;
+      }
+    }
   }
 }
 

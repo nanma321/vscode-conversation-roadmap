@@ -177,4 +177,50 @@ describe("RoadmapStore", () => {
     const fresh = store.getDocument();
     assert.strictEqual(fresh.roadmaps[0].title, "Sample roadmap");
   });
+
+  it("recovers from an orphaned temp file left by an interrupted write, without touching the real file", async () => {
+    const dir = makeTempDir();
+    const store = new RoadmapStore(dir);
+    await store.load();
+    await store.save({ version: 1, roadmaps: [sampleRoadmap()] });
+
+    // Simulate a crash between the temp-file write and the rename in persist().
+    const orphanTempPath = path.join(dir, "roadmaps.json.tmp-99999-123");
+    fs.writeFileSync(orphanTempPath, JSON.stringify({ version: 1, roadmaps: [] }), "utf8");
+    assert.ok(fs.existsSync(orphanTempPath));
+
+    const reloadedStore = new RoadmapStore(dir);
+    const reloaded = await reloadedStore.load();
+
+    // The real file (with its previously saved roadmap) is unaffected...
+    assert.strictEqual(reloaded.roadmaps.length, 1);
+    assert.strictEqual(reloaded.roadmaps[0].id, "roadmap-1");
+    // ...and the orphaned temp file has been cleaned up.
+    assert.ok(!fs.existsSync(orphanTempPath), "orphaned temp file should be removed on load");
+  });
+
+  it("deleteAll removes roadmaps.json from disk and resets in-memory state to empty", async () => {
+    const dir = makeTempDir();
+    const store = new RoadmapStore(dir);
+    await store.load();
+    await store.save({ version: 1, roadmaps: [sampleRoadmap()] });
+
+    await store.deleteAll();
+
+    assert.deepStrictEqual(store.getDocument().roadmaps, []);
+    assert.ok(!fs.existsSync(path.join(dir, "roadmaps.json")), "roadmaps.json should be deleted");
+
+    // A subsequent load from a fresh instance confirms nothing survives on disk.
+    const reloadedStore = new RoadmapStore(dir);
+    const reloaded = await reloadedStore.load();
+    assert.strictEqual(reloaded.roadmaps.length, 0);
+  });
+
+  it("deleteAll is safe to call when no file has ever been written", async () => {
+    const dir = makeTempDir();
+    const store = new RoadmapStore(dir);
+    await store.load();
+    await assert.doesNotReject(() => store.deleteAll());
+    assert.deepStrictEqual(store.getDocument().roadmaps, []);
+  });
 });

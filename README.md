@@ -95,4 +95,37 @@ malformed/unrecognized ones, and that edits apply only to the targeted node
 - its auto-layout fallback (`test/webview/layout.test.ts`), and resume-branch
 construction (`test/resume/`): ancestor-path context building with
 de-duplication and size caps, and branch node/edge creation that leaves the
-original path unchanged.
+original path unchanged. `test/reliability/` (Phase 9) covers the Webview's
+Content-Security-Policy string and incremental summarization at scale (500
+turns applied in small batches, verifying compaction and provenance are
+preserved).
+
+## Security, privacy, and reliability (Phase 9)
+
+- **Content-Security-Policy**: the graph Webview's CSP is built by the pure,
+  unit-tested `buildContentSecurityPolicy` (`src/webviewCsp.ts`) - deny by
+  default (`default-src 'none'`), scripts restricted to a fresh per-load
+  nonce (no `'unsafe-inline'`/`'unsafe-eval'`), and every resource directive
+  scoped to the Webview's own origin, never an arbitrary remote one.
+- **Untrusted Webview messages**: every message the Webview sends to the
+  host is validated by `validateWebviewMessage`/`applyWebviewMessage`
+  (`src/webviewMessages.ts`) before it can touch persisted state; malformed
+  or unrecognized messages are rejected without changing the roadmap. Messages
+  the host sends *to* the Webview are not user input and carry only roadmap
+  data the extension itself produced.
+- **Local data deletion**: the **Roadmap: Delete All Local Data** command
+  (`src/dataDeletion.ts`) permanently erases every captured turn and
+  roadmap graph after an explicit, modal confirmation, and refreshes any
+  open graph panel to reflect the now-empty state.
+- **No telemetry**: this extension does not send any telemetry and has no
+  dependency on `vscode.env.createTelemetryLogger` or similar APIs.
+  Conversation content (turns, summaries, roadmap graphs) is stored only
+  locally under `context.globalStorageUri` and is never transmitted
+  anywhere by the extension.
+- **Recovery from interrupted writes**: both `TurnStore` and `RoadmapStore`
+  write via a temp file + atomic rename, so `turns.json`/`roadmaps.json`
+  can never be left partially written. On every `load()`, each store also
+  cleans up any orphaned `*.tmp-*` file left behind by a write that was
+  interrupted (e.g. a crash) between that temp-file write and the rename,
+  without ever touching the real, already-persisted file.
+
