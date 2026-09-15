@@ -14,6 +14,7 @@ import { GraphView } from "./GraphView";
 import { OutlineView } from "./OutlineView";
 import { SessionTranscriptView } from "./SessionTranscriptView";
 import { NodeDetailsPanel } from "./NodeDetailsPanel";
+import { ResumePreview } from "./ResumePreview";
 import { VsCodeApi } from "./vscodeApi";
 
 export interface InitialState {
@@ -34,6 +35,9 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [canUndo, setCanUndo] = React.useState<boolean>(Boolean(initialState.canUndo));
   const [canRedo, setCanRedo] = React.useState<boolean>(Boolean(initialState.canRedo));
+  // Node id currently being resumed from (Phase 7); non-null while the resume
+  // preview modal is open.
+  const [resumeNodeId, setResumeNodeId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     function onMessage(event: MessageEvent<HostToWebviewMessage>): void {
@@ -112,7 +116,16 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   const handleUndo = React.useCallback(() => post({ type: "undo" }), [post]);
   const handleRedo = React.useCallback(() => post({ type: "redo" }), [post]);
 
+  const handleResumeSend = React.useCallback(
+    (nodeId: string, question: string) => {
+      post({ type: "resumeFromNode", nodeId, question: question.length > 0 ? question : undefined });
+      setResumeNodeId(null);
+    },
+    [post]
+  );
+
   const selectedNode = roadmap.nodes.find((n) => n.id === selectedNodeId) ?? null;
+  const resumeNode = roadmap.nodes.find((n) => n.id === resumeNodeId) ?? null;
   const turnsById = React.useMemo(() => new Map(turns.map((t) => [t.id, t])), [turns]);
 
   return (
@@ -195,9 +208,20 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
             }
             onMergeInto={(targetNodeId) => selectedNodeId && handleMergeNodes(selectedNodeId, targetNodeId)}
             onSplit={(title, sourceRefTurnIds) => selectedNodeId && handleSplitNode(selectedNodeId, title, sourceRefTurnIds)}
+            onResume={() => selectedNodeId && setResumeNodeId(selectedNodeId)}
           />
         )}
       </div>
+
+      {resumeNode ? (
+        <ResumePreview
+          node={resumeNode}
+          roadmap={roadmap}
+          turnsById={turnsById}
+          onSend={(question) => handleResumeSend(resumeNode.id, question)}
+          onCancel={() => setResumeNodeId(null)}
+        />
+      ) : null}
     </div>
   );
 }

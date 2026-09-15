@@ -37,6 +37,13 @@ export type WebviewToHostMessage =
   | { type: "mergeNodes"; sourceNodeId: string; targetNodeId: string }
   /** Splits the source turns listed in `sourceRefTurnIds` off of `nodeId` into a new node titled `title`, connected back to the original node by a manual edge. */
   | { type: "splitNode"; nodeId: string; title: string; sourceRefTurnIds: string[] }
+  /**
+   * Starts a new branch from `nodeId` (Phase 7 "Resume from here"): creates a
+   * fresh child node linked to the source node by a "branch" edge, seeded with
+   * an optional follow-up `question`. The source node and its path are left
+   * unchanged. The host also opens a new `@roadmap` interaction from this.
+   */
+  | { type: "resumeFromNode"; nodeId: string; question?: string }
   /** Restores the roadmap to the state it was in immediately before the most recent transaction. */
   | { type: "undo" }
   /** Re-applies the most recently undone transaction. */
@@ -251,6 +258,20 @@ export function validateWebviewMessage(value: unknown): MessageValidationResult 
     case "undo":
       return { valid: true, errors: [], value: { type: "undo" } };
 
+    case "resumeFromNode": {
+      if (!isNonEmptyString(value.nodeId)) {
+        pushErr(errors, "message.nodeId", "must be a non-empty string");
+      }
+      if (value.question !== undefined && typeof value.question !== "string") {
+        pushErr(errors, "message.question", "must be a string when present");
+      }
+      return finish(errors, () => ({
+        type: "resumeFromNode",
+        nodeId: value.nodeId as string,
+        question: value.question as string | undefined,
+      }));
+    }
+
     case "redo":
       return { valid: true, errors: [], value: { type: "redo" } };
 
@@ -441,6 +462,61 @@ export function applyWebviewMessage(
 
     history?.record(roadmap);
     return { roadmap: { ...roadmap, nodes, edges, updatedAt: now }, errors: [], changed: true };
+  }
+
+  if (message.type === "resumeFromNode") {
+    const node = roadmap.nodes.find((n) => n.id === message.nodeId);
+    if (!node) {
+      return { roadmap, errors: [`message.nodeId: no node with id "${message.nodeId}" exists in this roadmap`], changed: false };
+    }
+    const question = (message.question ?? "").trim();
+
+    // Duplicate guard (plan: "Prevent duplicate ... context"): if an identical
+    // resume branch already exists from this node - a "branch" child that has
+    // not yet accumulated any captured turns and carries the same follow-up
+    // question - do not create a second one (e.g. from an accidental
+    // double-send). Distinct follow-ups are always allowed.
+    const duplicate = roadmap.edges
+      .filter((e) => e.kind === "branch" && e.source === node.id)
+      .map((e) => roadmap.nodes.find((n) => n.id === e.target))
+      .some((child) => child !== undefined && child.sourceRefs.length === 0 && (child.notes ?? "").trim() === question);
+    if (duplicate) {
+      return { roadmap, errors: ["a matching resume branch already exists from this node"], changed: false };
+    }
+
+    const nodeIds = new Set(roadmap.nodes.map((n) => n.id));
+    const branchNode: RoadmapNode = {
+      id: generateUniqueId("node", nodeIds),
+      title: `Resume: ${node.title}`,
+      summary: "",
+      status: "open",
+      nodeType: "topic",
+      tags: [],
+      // The user's follow-up question (if any) is stored as notes so the intent
+      // of the branch is captured even before the resumed turn is answered.
+      notes: question,
+      sourceRefs: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    const edgeIds = new Set(roadmap.edges.map((e) => e.id));
+    const branchEdge: RoadmapEdge = {
+      id: generateUniqueId("edge", edgeIds),
+      source: node.id,
+      target: branchNode.id,
+      // A "branch" edge (not "manual") records that this child was created by
+      // resuming from the source node, keeping the branch traceable to its
+      // origin per the Phase 7 exit criteria.
+      kind: "branch",
+      label: "resume",
+    };
+
+    history?.record(roadmap);
+    return {
+      roadmap: { ...roadmap, nodes: [...roadmap.nodes, branchNode], edges: [...roadmap.edges, branchEdge], updatedAt: now },
+      errors: [],
+      changed: true,
+    };
   }
 
   if (message.type === "splitNode") {

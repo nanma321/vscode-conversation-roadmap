@@ -26,6 +26,10 @@
       {
         "command": "conversationRoadmap.openGraph",
         "title": "Roadmap: Open Graph"
+      },
+      {
+        "command": "conversationRoadmap.resumeFromNode",
+        "title": "Conversation Roadmap: Resume from Selected Node"
       }
     ]
   },

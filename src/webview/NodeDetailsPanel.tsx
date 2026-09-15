@@ -26,8 +26,9 @@ export function NodeDetailsPanel(props: {
   onToggleHighlight: (highlighted: boolean) => void;
   onMergeInto: (targetNodeId: string) => void;
   onSplit: (title: string, sourceRefTurnIds: string[]) => void;
+  onResume: () => void;
 }): React.JSX.Element {
-  const { node, roadmap, turnsById, onRename, onUpdateNotes, onUpdateTags, onUpdateColor, onToggleHighlight, onMergeInto, onSplit } =
+  const { node, roadmap, turnsById, onRename, onUpdateNotes, onUpdateTags, onUpdateColor, onToggleHighlight, onMergeInto, onSplit, onResume } =
     props;
   const [titleDraft, setTitleDraft] = React.useState(node?.title ?? "");
   const [notesDraft, setNotesDraft] = React.useState(node?.notes ?? "");
@@ -146,6 +147,13 @@ export function NodeDetailsPanel(props: {
           />{" "}
           Highlighted
         </label>
+      </div>
+
+      <div className="field resume-action">
+        <button type="button" className="resume-button" onClick={onResume}>
+          Resume from here&hellip;
+        </button>
+        <p className="resume-hint">Starts a new branch from this node without changing the original path.</p>
       </div>
 
       <div className="field structural-edit">

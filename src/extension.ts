@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { TurnStore } from "./turnStore";
 import { RoadmapStore } from "./model/roadmapStore";
 import { registerRoadmapParticipant } from "./chatParticipant";
-import { showGraphWebview, updateGraph } from "./webviewPanel";
+import { showGraphWebview, updateGraph, resumeSelectedNode } from "./webviewPanel";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Storage lives under globalStorageUri so captured turns persist across
@@ -32,6 +32,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   );
   context.subscriptions.push(openGraphCommand);
+
+  // Phase 7: "Resume from here" is also available from the command palette,
+  // acting on the node currently selected in the open graph.
+  const resumeCommand = vscode.commands.registerCommand(
+    "conversationRoadmap.resumeFromNode",
+    async () => {
+      await resumeSelectedNode();
+    }
+  );
+  context.subscriptions.push(resumeCommand);
 }
 
 export function deactivate(): void {

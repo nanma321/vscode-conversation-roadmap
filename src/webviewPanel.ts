@@ -23,7 +23,8 @@ import { TurnRecord, TurnStore } from "./turnStore";
 import { RoadmapStore } from "./model/roadmapStore";
 import { createDefaultSettings, Roadmap, RoadmapDocument } from "./model/types";
 import { RoadmapHistory } from "./model/roadmapHistory";
-import { applyWebviewMessage, HostToWebviewMessage } from "./webviewMessages";
+import { applyWebviewMessage, HostToWebviewMessage, validateWebviewMessage } from "./webviewMessages";
+import { buildResumeContext, formatResumeQuery, ResumeSourceTurn } from "./resume/resumeContext";
 
 /** Single roadmap this graph Webview reads/writes for now; multi-roadmap selection is a later phase. */
 const DEFAULT_ROADMAP_ID = "default";
@@ -31,6 +32,8 @@ const DEFAULT_ROADMAP_ID = "default";
 let currentPanel: vscode.WebviewPanel | undefined;
 let currentRoadmapStore: RoadmapStore | undefined;
 let currentTurnStore: TurnStore | undefined;
+/** Last node the Webview reported as selected, so the palette "Resume from Selected Node" command knows its target. */
+let currentSelectedNodeId: string | null = null;
 /** Undo/redo transaction history (Phase 6) for the single open roadmap; recreated each time the panel is (re)opened. */
 let currentHistory: RoadmapHistory = new RoadmapHistory();
 
@@ -143,6 +146,94 @@ export function updateGraph(turns: TurnRecord[]): void {
   void loadDefaultRoadmap(currentRoadmapStore).then((roadmap) => broadcastState(roadmap, turns));
 }
 
+/** Sends a validation/apply error back to the open Webview as a user-visible banner. */
+function postError(errors: string[]): void {
+  if (!currentPanel) {
+    return;
+  }
+  const message: HostToWebviewMessage = {
+    type: "error",
+    message: `Roadmap graph could not apply your change: ${errors.join("; ")}`,
+  };
+  void currentPanel.webview.postMessage(message);
+}
+
+/**
+ * Starts a new `@roadmap` interaction seeded with `query` (Phase 7).
+ *
+ * Public-API constraint: VS Code exposes no typed public API to programmatically
+ * invoke a chat participant or inject a user turn, and the product design
+ * forbids depending on private/internal commands. The one broadly available,
+ * user-visible mechanism is the built-in `workbench.action.chat.open` command,
+ * which merely *prefills* the chat input (the user still presses Enter, so
+ * nothing is sent without explicit consent). We probe for it first and, if it
+ * is unavailable, fall back to copying the context to the clipboard so the user
+ * can paste it into `@roadmap` themselves. Either way the branch node/edge has
+ * already been created, so the resume is traceable regardless of how the chat
+ * is ultimately started.
+ */
+async function startResumeInteraction(query: string): Promise<void> {
+  const available = await vscode.commands.getCommands(true);
+  if (available.includes("workbench.action.chat.open")) {
+    try {
+      await vscode.commands.executeCommand("workbench.action.chat.open", { query });
+      return;
+    } catch {
+      // Fall through to the clipboard path below.
+    }
+  }
+  await vscode.env.clipboard.writeText(query);
+  void vscode.window.showInformationMessage(
+    "Resume context copied to the clipboard. Paste it into the @roadmap chat to continue from this branch."
+  );
+}
+
+/**
+ * Creates a resume branch from `nodeId` and opens a new `@roadmap` interaction
+ * seeded with the reconstructed context. Persists and broadcasts the new
+ * branch first (so it is durable and visible even if the chat never opens),
+ * then hands the query to {@link startResumeInteraction}.
+ */
+async function performResume(nodeId: string, question: string | undefined): Promise<void> {
+  if (!currentRoadmapStore) {
+    return;
+  }
+  const roadmap = await loadDefaultRoadmap(currentRoadmapStore);
+  const turns = currentTurnStore?.getAll() ?? [];
+  const turnsById = new Map<string, ResumeSourceTurn>(turns.map((t) => [t.id, t]));
+
+  const result = applyWebviewMessage(roadmap, { type: "resumeFromNode", nodeId, question }, currentHistory);
+  if (!result.changed) {
+    if (result.errors.length > 0) {
+      postError(result.errors);
+    }
+    return;
+  }
+  await saveRoadmap(currentRoadmapStore, result.roadmap);
+  broadcastState(result.roadmap, turns);
+
+  // Build the context/query from the *pre-branch* roadmap (the ancestor path of
+  // the source node), which is exactly the context the preview showed.
+  const context = buildResumeContext(roadmap, nodeId, turnsById);
+  await startResumeInteraction(formatResumeQuery(context, question));
+}
+
+/**
+ * Command entry point for "Conversation Roadmap: Resume from Selected Node".
+ * Resumes from whichever node the open graph currently has selected.
+ */
+export async function resumeSelectedNode(): Promise<void> {
+  if (!currentPanel || !currentRoadmapStore) {
+    void vscode.window.showInformationMessage("Open the Roadmap graph and select a node first.");
+    return;
+  }
+  if (!currentSelectedNodeId) {
+    void vscode.window.showInformationMessage("Select a roadmap node to resume from first.");
+    return;
+  }
+  await performResume(currentSelectedNodeId, undefined);
+}
+
 /** Opens (or reveals) the graph Webview panel, populated with the current roadmap and turns. */
 export async function showGraphWebview(
   context: vscode.ExtensionContext,
@@ -175,6 +266,7 @@ export async function showGraphWebview(
   // yet to undo, and any history from a previously disposed panel no longer
   // corresponds to anything the user can see.
   currentHistory = new RoadmapHistory();
+  currentSelectedNodeId = null;
   panel.webview.html = renderHtml(panel.webview, context.extensionUri, roadmap, turns);
 
   panel.webview.onDidReceiveMessage(
@@ -187,6 +279,21 @@ export async function showGraphWebview(
       if (!currentRoadmapStore) {
         return;
       }
+
+      // Resume (Phase 7) has a side effect beyond a graph edit - it also opens
+      // a new chat interaction - so it is handled by its own path rather than
+      // the generic apply/persist flow below. Selection is tracked here so the
+      // palette "Resume from Selected Node" command knows its target.
+      const peek = validateWebviewMessage(rawMessage);
+      if (peek.valid && peek.value) {
+        if (peek.value.type === "selectNode") {
+          currentSelectedNodeId = peek.value.nodeId;
+        } else if (peek.value.type === "resumeFromNode") {
+          await performResume(peek.value.nodeId, peek.value.question);
+          return;
+        }
+      }
+
       const latestRoadmap = await loadDefaultRoadmap(currentRoadmapStore);
       const result = applyWebviewMessage(latestRoadmap, rawMessage, currentHistory);
       if (result.changed) {
