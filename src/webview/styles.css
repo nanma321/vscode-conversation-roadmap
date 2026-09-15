@@ -495,3 +495,22 @@ body {
   color: var(--vscode-textLink-foreground, #3794ff);
   word-break: break-all;
 }
+
+/* Session filter dropdown in the graph toolbar */
+.session-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+  font-size: 0.85em;
+}
+.session-filter-label {
+  opacity: 0.8;
+}
+.session-filter select {
+  background: var(--vscode-dropdown-background, #3c3c3c);
+  color: var(--vscode-dropdown-foreground, inherit);
+  border: 1px solid var(--vscode-dropdown-border, #454545);
+  border-radius: 3px;
+  padding: 0.15rem 0.3rem;
+}

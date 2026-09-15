@@ -27,13 +27,17 @@ no domain model, schema, or summarization yet (see later phases).
   a transcript detail panel, dragging to reposition nodes, and editing a
   node's title, notes, tags, color, and highlight state. An accessible
   outline/tree view is available as a keyboard-only alternative to the
-  canvas. A third "Session transcript" view lets you browse the raw
-  captured turns grouped by chat **session** via session chips at the top -
-  a new chat starts a fresh session, older sessions stay selectable, the
-  view follows the newest session by default until you click into an older
-  one, and turns persisted before sessions existed are grouped as "Earlier
-  turns". Every edit is sent as a Webview message that the extension host
-  validates (`src/webviewMessages.ts`) before persisting it via
+  canvas. The roadmap graph is **cumulative** (every chat's summarized
+  turns accumulate into one persistent graph); a **Session** filter in the
+  toolbar can narrow the graph/outline to a single chat (labeled to match
+  the transcript's "Chat N" chips) as a view-only transform that never
+  changes the persisted roadmap. A third "Session transcript" view lets you
+  browse the raw captured turns grouped by chat **session** via session
+  chips at the top - a new chat starts a fresh session, older sessions stay
+  selectable, the view follows the newest session by default until you click
+  into an older one, and turns persisted before sessions existed are grouped
+  as "Earlier turns". Every edit is sent as a Webview message that the
+  extension host validates (`src/webviewMessages.ts`) before persisting it via
   `RoadmapStore`, so edits survive a reload and a malformed message can
   never corrupt the graph. The Webview's Content-Security-Policy disallows
   everything by default and only allows scripts tied to a per-load nonce;

@@ -11,6 +11,7 @@ import { Roadmap } from "../model/types";
 import type { TurnRecord } from "../turnStore";
 import type { HostToWebviewMessage, WebviewToHostMessage } from "../webviewMessages";
 import { SearchFilters, searchRoadmap } from "../model/search";
+import { deriveSessionOptions, filterRoadmapBySession } from "./sessionFilter";
 import { GraphView } from "./GraphView";
 import { OutlineView } from "./OutlineView";
 import { SessionTranscriptView } from "./SessionTranscriptView";
@@ -45,6 +46,10 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   // on the host side.
   const [searchQuery, setSearchQuery] = React.useState<string>("");
   const [searchFilters, setSearchFilters] = React.useState<SearchFilters>({});
+  // Optional session filter (view-only): null shows the full cumulative graph;
+  // a session id narrows the graph/outline to that chat while leaving the
+  // persisted roadmap untouched.
+  const [sessionFilter, setSessionFilter] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     function onMessage(event: MessageEvent<HostToWebviewMessage>): void {
@@ -135,10 +140,24 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   const resumeNode = roadmap.nodes.find((n) => n.id === resumeNodeId) ?? null;
   const turnsById = React.useMemo(() => new Map(turns.map((t) => [t.id, t])), [turns]);
 
+  // Sessions available to filter by, and the session-narrowed view of the
+  // roadmap (view-only; the persisted roadmap is never changed).
+  const sessionOptions = React.useMemo(() => deriveSessionOptions(roadmap, turns), [roadmap, turns]);
+  React.useEffect(() => {
+    if (sessionFilter && !sessionOptions.some((o) => o.id === sessionFilter)) {
+      setSessionFilter(null);
+    }
+  }, [sessionFilter, sessionOptions]);
+  const visibleRoadmap = React.useMemo(
+    () => filterRoadmapBySession(roadmap, sessionFilter),
+    [roadmap, sessionFilter]
+  );
+
   // Recomputed on every roadmap/turns/query/filter change; `search.ts` is a
   // pure, cheap linear scan so there is no need to memoize beyond React's
-  // normal render cycle.
-  const searchMatches = searchRoadmap(roadmap, turns, searchQuery, searchFilters);
+  // normal render cycle. Search runs over the session-filtered view so match
+  // counts reflect what the user is actually looking at.
+  const searchMatches = searchRoadmap(visibleRoadmap, turns, searchQuery, searchFilters);
   const matchedNodeIds = new Set(searchMatches.map((m) => m.nodeId));
 
   return (
@@ -168,6 +187,23 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
         >
           Session transcript
         </button>
+        {viewMode !== "transcript" && sessionOptions.length > 1 ? (
+          <label className="session-filter">
+            <span className="session-filter-label">Session:</span>
+            <select
+              aria-label="Filter graph by chat session"
+              value={sessionFilter ?? ""}
+              onChange={(e) => setSessionFilter(e.target.value === "" ? null : e.target.value)}
+            >
+              <option value="">All sessions ({roadmap.nodes.length})</option>
+              {sessionOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label} ({option.nodeCount})
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <span className="toolbar-spacer" />
         <button type="button" onClick={handleUndo} disabled={!canUndo} aria-label="Undo last change">
           Undo
@@ -200,14 +236,20 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
       <div className="main">
         {viewMode === "transcript" ? (
           <SessionTranscriptView turns={turns} />
-        ) : roadmap.nodes.length === 0 ? (
+        ) : visibleRoadmap.nodes.length === 0 ? (
           <p className="empty">
-            No roadmap nodes yet. Ask <code>@roadmap</code> something in the chat panel; this graph updates
-            automatically as topics are captured.
+            {roadmap.nodes.length === 0 ? (
+              <>
+                No roadmap nodes yet. Ask <code>@roadmap</code> something in the chat panel; this graph updates
+                automatically as topics are captured.
+              </>
+            ) : (
+              <>No nodes in the selected session. Choose “All sessions” to see the full roadmap.</>
+            )}
           </p>
         ) : viewMode === "graph" ? (
           <GraphView
-            roadmap={roadmap}
+            roadmap={visibleRoadmap}
             selectedNodeId={selectedNodeId}
             matchedNodeIds={matchedNodeIds}
             onSelectNode={handleSelectNode}
@@ -216,7 +258,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
             onDeleteEdge={handleDeleteEdge}
           />
         ) : (
-          <OutlineView roadmap={roadmap} selectedNodeId={selectedNodeId} matchedNodeIds={matchedNodeIds} onSelectNode={handleSelectNode} />
+          <OutlineView roadmap={visibleRoadmap} selectedNodeId={selectedNodeId} matchedNodeIds={matchedNodeIds} onSelectNode={handleSelectNode} />
         )}
 
         {viewMode === "transcript" ? null : (
