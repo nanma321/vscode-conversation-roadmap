@@ -12,6 +12,7 @@
 import * as React from "react";
 import { Roadmap, RoadmapNode } from "../model/types";
 import type { TurnRecord } from "../turnStore";
+import { Markdown } from "./Markdown";
 
 const COLOR_SWATCHES = ["#f14c4c", "#e2a336", "#e5c116", "#4caf50", "#2472c8", "#a074c4", "#8b8b8b"];
 
@@ -234,13 +235,14 @@ export function NodeDetailsPanel(props: {
               <p>
                 <strong>Request:</strong> {turn.request}
               </p>
-              <p>
-                <strong>Response:</strong> {turn.response || "(no response)"}
-              </p>
-              <p className="transcript-meta">
-                {turn.completed ? "complete" : "incomplete"} &middot; {turn.timestamp}
-              </p>
-            </div>
+                <div className="transcript-response">
+                  <strong>Response:</strong>
+                  {turn.response ? <Markdown text={turn.response} /> : <span> (no response)</span>}
+                </div>
+                <p className="transcript-meta">
+                  {turn.completed ? "complete" : "incomplete"} &middot; {turn.timestamp}
+                </p>
+              </div>
           ))
         )}
       </div>

@@ -15,6 +15,7 @@
 import * as React from "react";
 import type { TurnRecord } from "../turnStore";
 import { LEGACY_SESSION_ID } from "../legacySessionId";
+import { Markdown } from "./Markdown";
 
 interface SessionGroup {
   sessionId: string;
@@ -91,9 +92,10 @@ export function SessionTranscriptView(props: { turns: TurnRecord[] }): React.JSX
             <p>
               <strong>Request:</strong> {turn.request}
             </p>
-            <p>
-              <strong>Response:</strong> {turn.response || "(no response)"}
-            </p>
+            <div className="transcript-response">
+              <strong>Response:</strong>
+              {turn.response ? <Markdown text={turn.response} /> : <span> (no response)</span>}
+            </div>
           </li>
         ))}
       </ul>

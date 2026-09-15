@@ -448,3 +448,50 @@ body {
   opacity: 0.4;
 }
 
+
+/* Rendered Markdown for captured model responses (source messages) */
+.transcript-response {
+  margin: 0.5rem 0;
+}
+.markdown {
+  margin-top: 0.25rem;
+}
+.markdown .md-p {
+  margin: 0.4rem 0;
+  white-space: pre-wrap;
+}
+.markdown .md-heading {
+  margin: 0.6rem 0 0.3rem;
+  line-height: 1.3;
+}
+.markdown .md-list {
+  margin: 0.4rem 0;
+  padding-left: 1.4rem;
+}
+.markdown .md-list li {
+  margin: 0.15rem 0;
+}
+.markdown .md-code {
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.75rem;
+  overflow-x: auto;
+  border-radius: 4px;
+  background: var(--vscode-textCodeBlock-background, #1e1e1e);
+  border: 1px solid var(--vscode-panel-border, #454545);
+}
+.markdown .md-code code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.9em;
+  white-space: pre;
+}
+.markdown .md-inline-code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.9em;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  background: var(--vscode-textCodeBlock-background, #1e1e1e);
+}
+.markdown .md-link {
+  color: var(--vscode-textLink-foreground, #3794ff);
+  word-break: break-all;
+}
