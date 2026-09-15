@@ -5,6 +5,7 @@ import { registerRoadmapParticipant } from "./chatParticipant";
 import { showGraphWebview, updateGraph, resumeSelectedNode } from "./webviewPanel";
 import { exportMarkdownOutlineCommand, exportRoadmapCommand, importRoadmapCommand } from "./importExportCommands";
 import { deleteAllDataCommand } from "./dataDeletion";
+import { RequestSummary, SummarizationService } from "./summarization/summarizationService";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Storage lives under globalStorageUri so captured turns persist across
@@ -18,9 +19,52 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const roadmapStore = new RoadmapStore(context.globalStorageUri.fsPath);
   await roadmapStore.load();
 
-  // Live refresh: whenever a new turn is captured, push it into the open graph
-  // panel (a no-op if the panel isn't open) so the graph updates in real time.
-  context.subscriptions.push({ dispose: store.onDidChange((turns) => updateGraph(turns)) });
+  // Summarization wiring (Phase 4 logic, connected here): after a turn is
+  // captured, the model is asked to fold it into the roadmap graph. The model
+  // call is injected so the summarization logic itself stays free of `vscode`.
+  // Only models the user is authorized to use are selected, and `sendRequest`
+  // surfaces VS Code's own consent flow, honoring the privacy requirement to
+  // use only user-authorized models.
+  const requestSummary: RequestSummary = async (prompt: string): Promise<string> => {
+    const [model] = await vscode.lm.selectChatModels({ vendor: "copilot" });
+    if (!model) {
+      throw new Error("No language model is available for summarization");
+    }
+    const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+    const source = new vscode.CancellationTokenSource();
+    try {
+      const response = await model.sendRequest(messages, {}, source.token);
+      let text = "";
+      for await (const fragment of response.text) {
+        text += fragment;
+      }
+      return text;
+    } finally {
+      source.dispose();
+    }
+  };
+  const summarizer = new SummarizationService(store, roadmapStore, requestSummary);
+
+  // Live refresh: whenever a new turn is captured, immediately push it into the
+  // open graph panel (so the transcript updates at once), then summarize the new
+  // turn into graph nodes and refresh again if the graph changed.
+  context.subscriptions.push({
+    dispose: store.onDidChange((turns) => {
+      void updateGraph(turns);
+      void summarizer
+        .summarizeNewTurns()
+        .then((outcome) => {
+          if (outcome.changed) {
+            return updateGraph(store.getAll());
+          }
+          return undefined;
+        })
+        .catch(() => {
+          // Summarization failures must never break capture; the turn is still
+          // recorded and visible in the transcript view.
+        });
+    }),
+  });
 
   registerRoadmapParticipant(context, store);
 

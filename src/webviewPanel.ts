@@ -21,14 +21,12 @@
 import * as vscode from "vscode";
 import { TurnRecord, TurnStore } from "./turnStore";
 import { RoadmapStore } from "./model/roadmapStore";
-import { createDefaultSettings, Roadmap, RoadmapDocument } from "./model/types";
+import { Roadmap } from "./model/types";
 import { RoadmapHistory } from "./model/roadmapHistory";
 import { applyWebviewMessage, HostToWebviewMessage, validateWebviewMessage } from "./webviewMessages";
 import { buildResumeContext, formatResumeQuery, ResumeSourceTurn } from "./resume/resumeContext";
 import { buildContentSecurityPolicy } from "./webviewCsp";
-
-/** Single roadmap this graph Webview reads/writes for now; multi-roadmap selection is a later phase. */
-const DEFAULT_ROADMAP_ID = "default";
+import { loadDefaultRoadmap, saveRoadmap } from "./model/defaultRoadmap";
 
 let currentPanel: vscode.WebviewPanel | undefined;
 let currentRoadmapStore: RoadmapStore | undefined;
@@ -45,48 +43,6 @@ function getNonce(): string {
     text += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return text;
-}
-
-/**
- * Returns the single default roadmap from `document`, creating (but not yet
- * persisting) an empty one if it doesn't exist yet. Callers that create a
- * new roadmap this way are responsible for persisting the updated document.
- */
-function getOrCreateDefaultRoadmap(document: RoadmapDocument): { roadmap: Roadmap; document: RoadmapDocument } {
-  const existing = document.roadmaps.find((r) => r.id === DEFAULT_ROADMAP_ID);
-  if (existing) {
-    return { roadmap: existing, document };
-  }
-  const now = new Date().toISOString();
-  const roadmap: Roadmap = {
-    id: DEFAULT_ROADMAP_ID,
-    title: "Roadmap",
-    createdAt: now,
-    updatedAt: now,
-    nodes: [],
-    edges: [],
-    settings: createDefaultSettings(),
-  };
-  return { roadmap, document: { ...document, roadmaps: [...document.roadmaps, roadmap] } };
-}
-
-/** Loads (creating if necessary) the default roadmap, persisting it if it had to be created. */
-async function loadDefaultRoadmap(store: RoadmapStore): Promise<Roadmap> {
-  const doc = await store.load();
-  const { roadmap, document } = getOrCreateDefaultRoadmap(doc);
-  if (document !== doc) {
-    await store.save(document);
-  }
-  return roadmap;
-}
-
-/** Persists `roadmap` back into its document, replacing the prior copy of the same id. */
-async function saveRoadmap(store: RoadmapStore, roadmap: Roadmap): Promise<void> {
-  const doc = await store.load();
-  const nextRoadmaps = doc.roadmaps.some((r) => r.id === roadmap.id)
-    ? doc.roadmaps.map((r) => (r.id === roadmap.id ? roadmap : r))
-    : [...doc.roadmaps, roadmap];
-  await store.save({ ...doc, roadmaps: nextRoadmaps });
 }
 
 function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, roadmap: Roadmap, turns: TurnRecord[]): string {

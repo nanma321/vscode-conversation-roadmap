@@ -12,6 +12,15 @@ no domain model, schema, or summarization yet (see later phases).
 - Each request/response turn is logged to local disk
   (`src/turnStore.ts`), using only `context.globalStorageUri` and Node's
   `fs` module - no undocumented VS Code APIs.
+- Captured turns are folded into the roadmap graph by incremental
+  summarization: after each turn is recorded,
+  `src/summarization/summarizationService.ts` builds the summary prompt,
+  asks a user-authorized language model, and applies the validated response
+  to the default roadmap (`summarizeIncrementally`), which then appears as
+  graph nodes. The model call is injected, so the summarization logic itself
+  stays free of `vscode` and unit-testable; a turn is attempted at most once,
+  runs are serialized, invalid model output leaves the graph unchanged, and
+  the per-roadmap `autoSummarize` setting can disable it.
 - A graph Webview (`src/webviewPanel.ts` + `src/webview/`, a React + React
   Flow app bundled with `esbuild.js` into `media/graph.js`) renders the
   persisted roadmap graph: pan/zoom/minimap/fit-to-view, node selection with
