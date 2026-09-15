@@ -10,11 +10,13 @@ import * as React from "react";
 import { Roadmap } from "../model/types";
 import type { TurnRecord } from "../turnStore";
 import type { HostToWebviewMessage, WebviewToHostMessage } from "../webviewMessages";
+import { SearchFilters, searchRoadmap } from "../model/search";
 import { GraphView } from "./GraphView";
 import { OutlineView } from "./OutlineView";
 import { SessionTranscriptView } from "./SessionTranscriptView";
 import { NodeDetailsPanel } from "./NodeDetailsPanel";
 import { ResumePreview } from "./ResumePreview";
+import { SearchBar } from "./SearchBar";
 import { VsCodeApi } from "./vscodeApi";
 
 export interface InitialState {
@@ -38,6 +40,11 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   // Node id currently being resumed from (Phase 7); non-null while the resume
   // preview modal is open.
   const [resumeNodeId, setResumeNodeId] = React.useState<string | null>(null);
+  // Search/filter state (Phase 8). Both are applied together via `search.ts`
+  // so the Webview's matching logic never diverges from what is unit-tested
+  // on the host side.
+  const [searchQuery, setSearchQuery] = React.useState<string>("");
+  const [searchFilters, setSearchFilters] = React.useState<SearchFilters>({});
 
   React.useEffect(() => {
     function onMessage(event: MessageEvent<HostToWebviewMessage>): void {
@@ -128,6 +135,12 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   const resumeNode = roadmap.nodes.find((n) => n.id === resumeNodeId) ?? null;
   const turnsById = React.useMemo(() => new Map(turns.map((t) => [t.id, t])), [turns]);
 
+  // Recomputed on every roadmap/turns/query/filter change; `search.ts` is a
+  // pure, cheap linear scan so there is no need to memoize beyond React's
+  // normal render cycle.
+  const searchMatches = searchRoadmap(roadmap, turns, searchQuery, searchFilters);
+  const matchedNodeIds = new Set(searchMatches.map((m) => m.nodeId));
+
   return (
     <div className="app">
       <div className="toolbar" role="toolbar" aria-label="Graph view controls">
@@ -173,6 +186,17 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
         </div>
       ) : null}
 
+      {viewMode === "transcript" ? null : (
+        <SearchBar
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          filters={searchFilters}
+          onFiltersChange={setSearchFilters}
+          matchCount={matchedNodeIds.size}
+          totalCount={roadmap.nodes.length}
+        />
+      )}
+
       <div className="main">
         {viewMode === "transcript" ? (
           <SessionTranscriptView turns={turns} />
@@ -185,13 +209,14 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
           <GraphView
             roadmap={roadmap}
             selectedNodeId={selectedNodeId}
+            matchedNodeIds={matchedNodeIds}
             onSelectNode={handleSelectNode}
             onMoveNode={handleMoveNode}
             onAddEdge={handleAddEdge}
             onDeleteEdge={handleDeleteEdge}
           />
         ) : (
-          <OutlineView roadmap={roadmap} selectedNodeId={selectedNodeId} onSelectNode={handleSelectNode} />
+          <OutlineView roadmap={roadmap} selectedNodeId={selectedNodeId} matchedNodeIds={matchedNodeIds} onSelectNode={handleSelectNode} />
         )}
 
         {viewMode === "transcript" ? null : (

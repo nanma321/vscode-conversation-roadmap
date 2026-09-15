@@ -11,14 +11,21 @@ import { RoadmapNode } from "../model/types";
 export interface RoadmapFlowNodeData {
   node: RoadmapNode;
   selected: boolean;
+  /** True when this node does not match the current search query/filters (Phase 8); rendered at reduced opacity rather than hidden. */
+  dimmed?: boolean;
 }
 
 export function RoadmapFlowNode(props: { data: RoadmapFlowNodeData }): React.JSX.Element {
-  const { node, selected } = props.data;
+  const { node, selected, dimmed } = props.data;
   const background = node.color ?? "var(--vscode-button-secondaryBackground, #333)";
   return (
     <div
-      className={"roadmap-flow-node" + (selected ? " selected" : "") + (node.highlighted ? " highlighted" : "")}
+      className={
+        "roadmap-flow-node" +
+        (selected ? " selected" : "") +
+        (node.highlighted ? " highlighted" : "") +
+        (dimmed ? " dimmed" : "")
+      }
       style={{ background }}
       title={node.summary}
     >

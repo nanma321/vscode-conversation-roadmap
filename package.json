@@ -30,6 +30,18 @@
       {
         "command": "conversationRoadmap.resumeFromNode",
         "title": "Conversation Roadmap: Resume from Selected Node"
+      },
+      {
+        "command": "conversationRoadmap.exportRoadmap",
+        "title": "Roadmap: Export Roadmap (JSON)"
+      },
+      {
+        "command": "conversationRoadmap.importRoadmap",
+        "title": "Roadmap: Import Roadmap (JSON)"
+      },
+      {
+        "command": "conversationRoadmap.exportMarkdownOutline",
+        "title": "Roadmap: Export Outline (Markdown)"
       }
     ]
   },

@@ -6,59 +6,18 @@
  * drag-and-drop can still inspect and select every node.
  */
 import * as React from "react";
-import { Roadmap, RoadmapNode } from "../model/types";
-
-interface OutlineEntry {
-  node: RoadmapNode;
-  depth: number;
-}
-
-function buildOutline(roadmap: Roadmap): OutlineEntry[] {
-  const childrenOf = new Map<string, string[]>();
-  const hasIncoming = new Set<string>();
-  for (const edge of roadmap.edges) {
-    if (!childrenOf.has(edge.source)) {
-      childrenOf.set(edge.source, []);
-    }
-    childrenOf.get(edge.source)!.push(edge.target);
-    hasIncoming.add(edge.target);
-  }
-  const nodesById = new Map(roadmap.nodes.map((n) => [n.id, n]));
-  const roots = roadmap.nodes.filter((n) => !hasIncoming.has(n.id));
-
-  const entries: OutlineEntry[] = [];
-  const visited = new Set<string>();
-  function visit(nodeId: string, depth: number): void {
-    if (visited.has(nodeId)) {
-      return;
-    }
-    visited.add(nodeId);
-    const node = nodesById.get(nodeId);
-    if (!node) {
-      return;
-    }
-    entries.push({ node, depth });
-    for (const childId of childrenOf.get(nodeId) ?? []) {
-      visit(childId, depth + 1);
-    }
-  }
-  (roots.length > 0 ? roots.map((n) => n.id) : roadmap.nodes.map((n) => n.id)).forEach((id) => visit(id, 0));
-  // Include any node unreachable from a root so nothing silently disappears from the outline.
-  roadmap.nodes.forEach((n) => {
-    if (!visited.has(n.id)) {
-      visit(n.id, 0);
-    }
-  });
-  return entries;
-}
+import { Roadmap } from "../model/types";
+import { buildRoadmapOutline } from "../model/outline";
 
 export function OutlineView(props: {
   roadmap: Roadmap;
   selectedNodeId: string | null;
+  /** Ids of nodes currently matching the search query/filters (Phase 8); unmatched nodes render dimmed rather than being hidden, preserving the outline's tree structure. */
+  matchedNodeIds: ReadonlySet<string>;
   onSelectNode: (nodeId: string | null) => void;
 }): React.JSX.Element {
-  const { roadmap, selectedNodeId, onSelectNode } = props;
-  const entries = React.useMemo(() => buildOutline(roadmap), [roadmap]);
+  const { roadmap, selectedNodeId, matchedNodeIds, onSelectNode } = props;
+  const entries = React.useMemo(() => buildRoadmapOutline(roadmap), [roadmap]);
   const itemRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
 
   const focusItem = (index: number): void => {
@@ -97,7 +56,12 @@ export function OutlineView(props: {
             role="treeitem"
             aria-selected={entry.node.id === selectedNodeId}
             aria-level={entry.depth + 1}
-            className={"outline-item" + (entry.node.id === selectedNodeId ? " selected" : "") + (entry.node.highlighted ? " highlighted" : "")}
+            className={
+              "outline-item" +
+              (entry.node.id === selectedNodeId ? " selected" : "") +
+              (entry.node.highlighted ? " highlighted" : "") +
+              (matchedNodeIds.has(entry.node.id) ? "" : " dimmed")
+            }
             style={{ paddingLeft: `${entry.depth * 1.25 + 0.5}rem`, borderLeftColor: entry.node.color }}
             onClick={() => onSelectNode(entry.node.id)}
             onKeyDown={(e) => handleKeyDown(e, index)}

@@ -27,13 +27,13 @@ import { RoadmapFlowNode, RoadmapFlowNodeData } from "./RoadmapFlowNode";
 
 const NODE_TYPES: NodeTypes = { roadmapNode: RoadmapFlowNode };
 
-function toFlowNodes(roadmap: Roadmap, selectedNodeId: string | null): Node<RoadmapFlowNodeData>[] {
+function toFlowNodes(roadmap: Roadmap, selectedNodeId: string | null, matchedNodeIds: ReadonlySet<string>): Node<RoadmapFlowNodeData>[] {
   const positions = resolveNodePositions(roadmap.nodes, roadmap.edges);
   return roadmap.nodes.map((node) => ({
     id: node.id,
     type: "roadmapNode",
     position: positions.get(node.id) ?? { x: 0, y: 0 },
-    data: { node, selected: node.id === selectedNodeId },
+    data: { node, selected: node.id === selectedNodeId, dimmed: !matchedNodeIds.has(node.id) },
   }));
 }
 
@@ -73,17 +73,21 @@ function FitOnLoad(): null {
 export function GraphView(props: {
   roadmap: Roadmap;
   selectedNodeId: string | null;
+  /** Ids of nodes currently matching the search query/filters (Phase 8); unmatched nodes render dimmed rather than being hidden, so the graph's overall shape stays visible. */
+  matchedNodeIds: ReadonlySet<string>;
   onSelectNode: (nodeId: string | null) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   onAddEdge: (source: string, target: string) => void;
   onDeleteEdge: (edgeId: string) => void;
 }): React.JSX.Element {
-  const { roadmap, selectedNodeId, onSelectNode, onMoveNode, onAddEdge, onDeleteEdge } = props;
-  const [nodes, setNodes] = React.useState<Node<RoadmapFlowNodeData>[]>(() => toFlowNodes(roadmap, selectedNodeId));
+  const { roadmap, selectedNodeId, matchedNodeIds, onSelectNode, onMoveNode, onAddEdge, onDeleteEdge } = props;
+  const [nodes, setNodes] = React.useState<Node<RoadmapFlowNodeData>[]>(() =>
+    toFlowNodes(roadmap, selectedNodeId, matchedNodeIds)
+  );
 
   React.useEffect(() => {
-    setNodes(toFlowNodes(roadmap, selectedNodeId));
-  }, [roadmap, selectedNodeId]);
+    setNodes(toFlowNodes(roadmap, selectedNodeId, matchedNodeIds));
+  }, [roadmap, selectedNodeId, matchedNodeIds]);
 
   const edges = React.useMemo(() => toFlowEdges(roadmap), [roadmap]);
 

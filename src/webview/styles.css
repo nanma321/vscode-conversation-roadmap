@@ -384,3 +384,67 @@ body {
   background: var(--vscode-button-background, #0e639c);
   color: var(--vscode-button-foreground, #fff);
 }
+/* Search / filter toolbar (Phase 8) */
+.search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--vscode-panel-border, #888);
+}
+
+.search-input,
+.tags-filter-input {
+  background: var(--vscode-input-background, #3c3c3c);
+  color: var(--vscode-input-foreground, inherit);
+  border: 1px solid var(--vscode-input-border, transparent);
+  padding: 0.3rem;
+  font-family: inherit;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.search-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--vscode-panel-border, #888);
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  margin: 0;
+}
+
+.search-filters legend {
+  font-size: 0.75em;
+  opacity: 0.75;
+  padding: 0 0.25rem;
+}
+
+.filter-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.search-count {
+  font-size: 0.8em;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+/* Nodes/entries that don't match the current search query/filters (Phase 8)
+   are dimmed rather than hidden, so the overall graph/outline shape stays visible. */
+.roadmap-flow-node.dimmed {
+  opacity: 0.3;
+}
+
+.outline-item.dimmed {
+  opacity: 0.4;
+}
+

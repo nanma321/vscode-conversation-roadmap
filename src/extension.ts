@@ -3,6 +3,7 @@ import { TurnStore } from "./turnStore";
 import { RoadmapStore } from "./model/roadmapStore";
 import { registerRoadmapParticipant } from "./chatParticipant";
 import { showGraphWebview, updateGraph, resumeSelectedNode } from "./webviewPanel";
+import { exportMarkdownOutlineCommand, exportRoadmapCommand, importRoadmapCommand } from "./importExportCommands";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Storage lives under globalStorageUri so captured turns persist across
@@ -42,6 +43,36 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   );
   context.subscriptions.push(resumeCommand);
+
+  // Phase 8: versioned JSON export/import and Markdown outline export, each
+  // a thin command wrapper over the pure logic in
+  // `model/exportImport.ts`/`model/markdownExport.ts`.
+  const exportRoadmapCmd = vscode.commands.registerCommand(
+    "conversationRoadmap.exportRoadmap",
+    async () => {
+      await exportRoadmapCommand(roadmapStore);
+    }
+  );
+  context.subscriptions.push(exportRoadmapCmd);
+
+  const importRoadmapCmd = vscode.commands.registerCommand(
+    "conversationRoadmap.importRoadmap",
+    async () => {
+      await importRoadmapCommand(roadmapStore);
+      // Refresh any open graph panel so an import is immediately visible
+      // without requiring the user to reopen it.
+      await updateGraph(store.getAll());
+    }
+  );
+  context.subscriptions.push(importRoadmapCmd);
+
+  const exportMarkdownOutlineCmd = vscode.commands.registerCommand(
+    "conversationRoadmap.exportMarkdownOutline",
+    async () => {
+      await exportMarkdownOutlineCommand(roadmapStore);
+    }
+  );
+  context.subscriptions.push(exportMarkdownOutlineCmd);
 }
 
 export function deactivate(): void {
