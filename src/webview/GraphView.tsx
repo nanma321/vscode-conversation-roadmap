@@ -9,6 +9,7 @@
 import * as React from "react";
 import ReactFlow, {
   Background,
+  Connection,
   Controls,
   Edge,
   MiniMap,
@@ -36,6 +37,14 @@ function toFlowNodes(roadmap: Roadmap, selectedNodeId: string | null): Node<Road
   }));
 }
 
+/**
+ * Converts persisted edges into React Flow edges, styling them so semantic
+ * structure is visually distinguishable from pure layout (Phase 6):
+ * AI-generated "branch" edges are animated, user-defined "manual" edges are
+ * dashed, and "topic" edges (the default AI-generated continuation) are
+ * plain solid lines. None of this styling is persisted - it is derived
+ * purely from each edge's `kind` every render.
+ */
 function toFlowEdges(roadmap: Roadmap): Edge[] {
   return roadmap.edges.map((edge) => ({
     id: edge.id,
@@ -43,6 +52,8 @@ function toFlowEdges(roadmap: Roadmap): Edge[] {
     target: edge.target,
     label: edge.label,
     animated: edge.kind === "branch",
+    style: edge.kind === "manual" ? { strokeDasharray: "6 4" } : undefined,
+    className: `roadmap-edge roadmap-edge-${edge.kind}`,
   }));
 }
 
@@ -64,8 +75,10 @@ export function GraphView(props: {
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string | null) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
+  onAddEdge: (source: string, target: string) => void;
+  onDeleteEdge: (edgeId: string) => void;
 }): React.JSX.Element {
-  const { roadmap, selectedNodeId, onSelectNode, onMoveNode } = props;
+  const { roadmap, selectedNodeId, onSelectNode, onMoveNode, onAddEdge, onDeleteEdge } = props;
   const [nodes, setNodes] = React.useState<Node<RoadmapFlowNodeData>[]>(() => toFlowNodes(roadmap, selectedNodeId));
 
   React.useEffect(() => {
@@ -94,6 +107,28 @@ export function GraphView(props: {
 
   const handlePaneClick = React.useCallback(() => onSelectNode(null), [onSelectNode]);
 
+  // Dragging a connection from one node's handle to another's is how a
+  // user defines a new ("manual") edge directly on the canvas (Phase 6).
+  // React Flow only calls this once both a source and target are resolved,
+  // so there is nothing further to validate here - the host still
+  // validates/rejects the resulting `addEdge` message before it can touch
+  // persisted state.
+  const handleConnect = React.useCallback(
+    (connection: Connection) => {
+      if (connection.source && connection.target) {
+        onAddEdge(connection.source, connection.target);
+      }
+    },
+    [onAddEdge]
+  );
+
+  const handleEdgeClick = React.useCallback(
+    (_event: React.MouseEvent, edge: Edge) => {
+      onDeleteEdge(edge.id);
+    },
+    [onDeleteEdge]
+  );
+
   return (
     <div className="graph-canvas" role="application" aria-label="Roadmap graph">
       <ReactFlowProvider>
@@ -105,6 +140,8 @@ export function GraphView(props: {
           onNodeDragStop={handleNodeDragStop}
           onNodeClick={handleNodeClick}
           onPaneClick={handlePaneClick}
+          onConnect={handleConnect}
+          onEdgeClick={handleEdgeClick}
           fitView
           minZoom={0.1}
           maxZoom={2}

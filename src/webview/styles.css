@@ -40,6 +40,15 @@ body {
   color: var(--vscode-button-foreground, #fff);
 }
 
+.toolbar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
 .error-banner {
   background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
   color: var(--vscode-inputValidation-errorForeground, #fff);
@@ -144,6 +153,26 @@ body {
   padding-top: 0.5rem;
 }
 
+.structural-edit {
+  border-top: 1px solid var(--vscode-panel-border, #888);
+  padding-top: 0.5rem;
+}
+
+.merge-controls,
+.split-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.split-turn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
 .transcript-turn {
   margin-bottom: 0.75rem;
 }
@@ -206,6 +235,21 @@ body {
   background: rgba(255, 255, 255, 0.2);
   padding: 0 0.3rem;
   border-radius: 6px;
+}
+
+/*
+ * Edge styling by `kind` (Phase 6): "topic"/"branch" are AI-generated
+ * semantic structure (solid, with "branch" additionally animated by React
+ * Flow via its `animated` prop), while "manual" is user-defined structure,
+ * rendered dashed so it always reads as distinct from both the
+ * AI-generated edges and from pure visual layout.
+ */
+.roadmap-edge-manual .react-flow__edge-path {
+  stroke: var(--vscode-charts-purple, #a074c4);
+}
+
+.roadmap-edge-branch .react-flow__edge-path {
+  stroke: var(--vscode-charts-orange, #e2a336);
 }
 
 .session-transcript-view {

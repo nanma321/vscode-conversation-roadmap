@@ -22,6 +22,7 @@ import * as vscode from "vscode";
 import { TurnRecord, TurnStore } from "./turnStore";
 import { RoadmapStore } from "./model/roadmapStore";
 import { createDefaultSettings, Roadmap, RoadmapDocument } from "./model/types";
+import { RoadmapHistory } from "./model/roadmapHistory";
 import { applyWebviewMessage, HostToWebviewMessage } from "./webviewMessages";
 
 /** Single roadmap this graph Webview reads/writes for now; multi-roadmap selection is a later phase. */
@@ -30,6 +31,8 @@ const DEFAULT_ROADMAP_ID = "default";
 let currentPanel: vscode.WebviewPanel | undefined;
 let currentRoadmapStore: RoadmapStore | undefined;
 let currentTurnStore: TurnStore | undefined;
+/** Undo/redo transaction history (Phase 6) for the single open roadmap; recreated each time the panel is (re)opened. */
+let currentHistory: RoadmapHistory = new RoadmapHistory();
 
 function getNonce(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -86,7 +89,12 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, roadmap: 
   const nonce = getNonce();
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "media", "graph.js"));
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "media", "graph.css"));
-  const stateJson = JSON.stringify({ roadmap, turns }).replace(/</g, "\\u003c");
+  const stateJson = JSON.stringify({
+    roadmap,
+    turns,
+    canUndo: currentHistory.canUndo(),
+    canRedo: currentHistory.canRedo(),
+  }).replace(/</g, "\\u003c");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -106,10 +114,16 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, roadmap: 
 </html>`;
 }
 
-/** Pushes the latest roadmap/turns into an already-open graph panel, if any. */
+/** Pushes the latest roadmap/turns (and undo/redo availability) into an already-open graph panel, if any. */
 function broadcastState(roadmap: Roadmap, turns: TurnRecord[]): void {
   if (currentPanel) {
-    const message: HostToWebviewMessage = { type: "state", roadmap, turns };
+    const message: HostToWebviewMessage = {
+      type: "state",
+      roadmap,
+      turns,
+      canUndo: currentHistory.canUndo(),
+      canRedo: currentHistory.canRedo(),
+    };
     void currentPanel.webview.postMessage(message);
   }
 }
@@ -157,6 +171,10 @@ export async function showGraphWebview(
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "media")],
     }
   );
+  // A fresh panel starts with a fresh transaction history: there is nothing
+  // yet to undo, and any history from a previously disposed panel no longer
+  // corresponds to anything the user can see.
+  currentHistory = new RoadmapHistory();
   panel.webview.html = renderHtml(panel.webview, context.extensionUri, roadmap, turns);
 
   panel.webview.onDidReceiveMessage(
@@ -170,7 +188,7 @@ export async function showGraphWebview(
         return;
       }
       const latestRoadmap = await loadDefaultRoadmap(currentRoadmapStore);
-      const result = applyWebviewMessage(latestRoadmap, rawMessage);
+      const result = applyWebviewMessage(latestRoadmap, rawMessage, currentHistory);
       if (result.changed) {
         await saveRoadmap(currentRoadmapStore, result.roadmap);
         broadcastState(result.roadmap, currentTurnStore?.getAll() ?? []);

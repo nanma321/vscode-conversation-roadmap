@@ -16,8 +16,9 @@
  * unit-tested in isolation, matching the pattern used throughout the rest
  * of the extension host.
  */
-import { Roadmap, RoadmapNode } from "./model/types";
+import { Roadmap, RoadmapEdge, RoadmapNode, SourceReference } from "./model/types";
 import { HEX_COLOR_PATTERN } from "./model/colorPattern";
+import { RoadmapHistory } from "./model/roadmapHistory";
 import type { TurnRecord } from "./turnStore";
 
 /** Every message shape the graph Webview may send to the extension host. */
@@ -28,6 +29,18 @@ export type WebviewToHostMessage =
   | { type: "updateTags"; nodeId: string; tags: string[] }
   | { type: "updateColor"; nodeId: string; color: string | null }
   | { type: "toggleHighlight"; nodeId: string; highlighted: boolean }
+  /** Creates a user-defined ("manual") edge between two existing nodes (Phase 6). Distinct from the AI-generated "topic"/"branch" edges the summarizer creates. */
+  | { type: "addEdge"; source: string; target: string; label?: string }
+  /** Removes a single edge. Destructive - the Webview must confirm with the user before sending this. */
+  | { type: "deleteEdge"; edgeId: string }
+  /** Merges `sourceNodeId` into `targetNodeId`, combining their provenance/tags/notes and removing the source node. Destructive - the Webview must confirm with the user before sending this. */
+  | { type: "mergeNodes"; sourceNodeId: string; targetNodeId: string }
+  /** Splits the source turns listed in `sourceRefTurnIds` off of `nodeId` into a new node titled `title`, connected back to the original node by a manual edge. */
+  | { type: "splitNode"; nodeId: string; title: string; sourceRefTurnIds: string[] }
+  /** Restores the roadmap to the state it was in immediately before the most recent transaction. */
+  | { type: "undo" }
+  /** Re-applies the most recently undone transaction. */
+  | { type: "redo" }
   | { type: "selectNode"; nodeId: string | null }
   | { type: "requestState" };
 
@@ -38,7 +51,7 @@ export type WebviewToHostMessage =
  * source of truth for the wire protocol shared by both sides.
  */
 export type HostToWebviewMessage =
-  | { type: "state"; roadmap: Roadmap; turns: TurnRecord[] }
+  | { type: "state"; roadmap: Roadmap; turns: TurnRecord[]; canUndo: boolean; canRedo: boolean }
   | { type: "error"; message: string };
 
 /** The result of validating an unknown value as a {@link WebviewToHostMessage}. */
@@ -164,6 +177,83 @@ export function validateWebviewMessage(value: unknown): MessageValidationResult 
       }));
     }
 
+    case "addEdge": {
+      if (!isNonEmptyString(value.source)) {
+        pushErr(errors, "message.source", "must be a non-empty string");
+      }
+      if (!isNonEmptyString(value.target)) {
+        pushErr(errors, "message.target", "must be a non-empty string");
+      }
+      if (isNonEmptyString(value.source) && isNonEmptyString(value.target) && value.source === value.target) {
+        pushErr(errors, "message.target", "must not be the same node as message.source (no self-loop edges)");
+      }
+      if (value.label !== undefined && typeof value.label !== "string") {
+        pushErr(errors, "message.label", "must be a string when present");
+      }
+      return finish(errors, () => ({
+        type: "addEdge",
+        source: value.source as string,
+        target: value.target as string,
+        label: value.label as string | undefined,
+      }));
+    }
+
+    case "deleteEdge": {
+      if (!isNonEmptyString(value.edgeId)) {
+        pushErr(errors, "message.edgeId", "must be a non-empty string");
+      }
+      return finish(errors, () => ({ type: "deleteEdge", edgeId: value.edgeId as string }));
+    }
+
+    case "mergeNodes": {
+      if (!isNonEmptyString(value.sourceNodeId)) {
+        pushErr(errors, "message.sourceNodeId", "must be a non-empty string");
+      }
+      if (!isNonEmptyString(value.targetNodeId)) {
+        pushErr(errors, "message.targetNodeId", "must be a non-empty string");
+      }
+      if (
+        isNonEmptyString(value.sourceNodeId) &&
+        isNonEmptyString(value.targetNodeId) &&
+        value.sourceNodeId === value.targetNodeId
+      ) {
+        pushErr(errors, "message.targetNodeId", "must differ from message.sourceNodeId (cannot merge a node into itself)");
+      }
+      return finish(errors, () => ({
+        type: "mergeNodes",
+        sourceNodeId: value.sourceNodeId as string,
+        targetNodeId: value.targetNodeId as string,
+      }));
+    }
+
+    case "splitNode": {
+      if (!isNonEmptyString(value.nodeId)) {
+        pushErr(errors, "message.nodeId", "must be a non-empty string");
+      }
+      if (typeof value.title !== "string" || value.title.trim().length === 0) {
+        pushErr(errors, "message.title", "must be a non-empty string");
+      }
+      if (
+        !Array.isArray(value.sourceRefTurnIds) ||
+        value.sourceRefTurnIds.length === 0 ||
+        !value.sourceRefTurnIds.every((id) => typeof id === "string" && id.length > 0)
+      ) {
+        pushErr(errors, "message.sourceRefTurnIds", "must be a non-empty array of non-empty strings");
+      }
+      return finish(errors, () => ({
+        type: "splitNode",
+        nodeId: value.nodeId as string,
+        title: (value.title as string).trim(),
+        sourceRefTurnIds: [...(value.sourceRefTurnIds as string[])],
+      }));
+    }
+
+    case "undo":
+      return { valid: true, errors: [], value: { type: "undo" } };
+
+    case "redo":
+      return { valid: true, errors: [], value: { type: "redo" } };
+
     default:
       return { valid: false, errors: [`message.type: unrecognized message type "${type}"`] };
   }
@@ -180,20 +270,68 @@ function finish(errors: string[], build: () => WebviewToHostMessage): MessageVal
   return { valid: true, errors: [], value: build() };
 }
 
+/** Generates an id of the form `${prefix}-${n}` that does not collide with any id already in `existingIds`. */
+function generateUniqueId(prefix: string, existingIds: ReadonlySet<string>): string {
+  let candidate: string;
+  let n = existingIds.size + 1;
+  do {
+    candidate = `${prefix}-${n}`;
+    n += 1;
+  } while (existingIds.has(candidate));
+  return candidate;
+}
+
+/** Two source references are the same underlying turn if both their `turnId` and `sessionId` match. */
+function sameSourceRef(a: SourceReference, b: SourceReference): boolean {
+  return a.turnId === b.turnId && a.sessionId === b.sessionId;
+}
+
+/**
+ * Unions two nodes' source references without ever dropping a reference:
+ * every entry from both `a` and `b` appears in the result, with only exact
+ * duplicates (same turn *and* session) collapsed. This is what makes merge
+ * provenance-preserving - every source turn either node was derived from is
+ * still traceable from the merged node afterwards.
+ */
+function unionSourceRefs(a: SourceReference[], b: SourceReference[]): SourceReference[] {
+  const merged = [...a];
+  for (const ref of b) {
+    if (!merged.some((existing) => sameSourceRef(existing, ref))) {
+      merged.push(ref);
+    }
+  }
+  return merged;
+}
+
 /**
  * Validates `rawMessage` (untrusted input from the Webview) and, if valid,
  * applies the edit it describes to `roadmap`. Returns the original
  * `roadmap` unchanged (with `changed: false`) whenever the message is
- * malformed or refers to a node id that does not exist in `roadmap`, and
- * for messages that carry no persisted edit (`selectNode`, `requestState`).
+ * malformed or refers to a node/edge id that does not exist in `roadmap`,
+ * and for messages that carry no persisted edit (`selectNode`,
+ * `requestState`, or an `undo`/`redo` with nothing to undo/redo).
  *
- * Only ever touches the single targeted node's edited field(s) plus its
- * `updatedAt` timestamp - every other field on that node, every other node,
- * and the roadmap's own edges/settings are passed through unchanged, so a
- * user edit can never clobber unrelated state (including AI-generated
- * summaries or other in-flight edits).
+ * `history`, if provided, is used to record each applied transaction (so a
+ * later `undo` message can restore the roadmap to exactly its state before
+ * that transaction) and to resolve `undo`/`redo` messages themselves. Each
+ * call site that wants working undo/redo across multiple messages must pass
+ * the *same* {@link RoadmapHistory} instance every time; callers that don't
+ * care about undo/redo (e.g. most existing tests) can omit it entirely.
+ *
+ * Field-level edits (`moveNode`, `renameNode`, etc.) only ever touch the
+ * single targeted node's edited field(s) plus its `updatedAt` timestamp -
+ * every other field on that node, every other node, and the roadmap's own
+ * edges/settings are passed through unchanged, so a user edit can never
+ * clobber unrelated state (including AI-generated summaries or other
+ * in-flight edits). Structural edits (`addEdge`, `deleteEdge`,
+ * `mergeNodes`, `splitNode`) never drop a node's `sourceRefs` - provenance
+ * is always redistributed, never discarded.
  */
-export function applyWebviewMessage(roadmap: Roadmap, rawMessage: unknown): ApplyMessageResult {
+export function applyWebviewMessage(
+  roadmap: Roadmap,
+  rawMessage: unknown,
+  history?: RoadmapHistory
+): ApplyMessageResult {
   const validation = validateWebviewMessage(rawMessage);
   if (!validation.valid || !validation.value) {
     return { roadmap, errors: validation.errors, changed: false };
@@ -205,12 +343,161 @@ export function applyWebviewMessage(roadmap: Roadmap, rawMessage: unknown): Appl
     return { roadmap, errors: [], changed: false };
   }
 
+  if (message.type === "undo") {
+    const previous = history?.undo(roadmap);
+    if (!previous) {
+      return { roadmap, errors: ["undo: no prior state to restore"], changed: false };
+    }
+    return { roadmap: previous, errors: [], changed: true };
+  }
+
+  if (message.type === "redo") {
+    const next = history?.redo(roadmap);
+    if (!next) {
+      return { roadmap, errors: ["redo: no undone state to restore"], changed: false };
+    }
+    return { roadmap: next, errors: [], changed: true };
+  }
+
+  const now = new Date().toISOString();
+
+  if (message.type === "addEdge") {
+    if (!roadmap.nodes.some((n) => n.id === message.source)) {
+      return { roadmap, errors: [`message.source: no node with id "${message.source}" exists in this roadmap`], changed: false };
+    }
+    if (!roadmap.nodes.some((n) => n.id === message.target)) {
+      return { roadmap, errors: [`message.target: no node with id "${message.target}" exists in this roadmap`], changed: false };
+    }
+    if (roadmap.edges.some((e) => e.source === message.source && e.target === message.target)) {
+      return { roadmap, errors: [`an edge from "${message.source}" to "${message.target}" already exists`], changed: false };
+    }
+    const edgeIds = new Set(roadmap.edges.map((e) => e.id));
+    const edge: RoadmapEdge = {
+      id: generateUniqueId("edge", edgeIds),
+      source: message.source,
+      target: message.target,
+      // User-created edges are always "manual" so the graph can always
+      // distinguish this semantic-but-user-authored structure from the
+      // AI-generated "topic"/"branch" edges and from pure visual layout.
+      kind: "manual",
+      label: message.label,
+    };
+    history?.record(roadmap);
+    return { roadmap: { ...roadmap, edges: [...roadmap.edges, edge], updatedAt: now }, errors: [], changed: true };
+  }
+
+  if (message.type === "deleteEdge") {
+    if (!roadmap.edges.some((e) => e.id === message.edgeId)) {
+      return { roadmap, errors: [`message.edgeId: no edge with id "${message.edgeId}" exists in this roadmap`], changed: false };
+    }
+    history?.record(roadmap);
+    const edges = roadmap.edges.filter((e) => e.id !== message.edgeId);
+    return { roadmap: { ...roadmap, edges, updatedAt: now }, errors: [], changed: true };
+  }
+
+  if (message.type === "mergeNodes") {
+    const source = roadmap.nodes.find((n) => n.id === message.sourceNodeId);
+    if (!source) {
+      return { roadmap, errors: [`message.sourceNodeId: no node with id "${message.sourceNodeId}" exists in this roadmap`], changed: false };
+    }
+    const target = roadmap.nodes.find((n) => n.id === message.targetNodeId);
+    if (!target) {
+      return { roadmap, errors: [`message.targetNodeId: no node with id "${message.targetNodeId}" exists in this roadmap`], changed: false };
+    }
+
+    const mergedNotes = [target.notes, source.notes].map((n) => n.trim()).filter((n) => n.length > 0).join("\n\n");
+    const mergedNode: RoadmapNode = {
+      ...target,
+      tags: Array.from(new Set([...target.tags, ...source.tags])),
+      notes: mergedNotes,
+      sourceRefs: unionSourceRefs(target.sourceRefs, source.sourceRefs),
+      updatedAt: now,
+    };
+
+    // Redirect any edge touching the removed source node to the target
+    // node instead of dropping it, then discard any edge that has become a
+    // self-loop or an exact duplicate of another edge as a result.
+    const redirected = roadmap.edges.map((e) => ({
+      ...e,
+      source: e.source === message.sourceNodeId ? message.targetNodeId : e.source,
+      target: e.target === message.sourceNodeId ? message.targetNodeId : e.target,
+    }));
+    const seen = new Set<string>();
+    const edges = redirected.filter((e) => {
+      if (e.source === e.target) {
+        return false;
+      }
+      const key = `${e.source}->${e.target}->${e.kind}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+
+    const nodes = roadmap.nodes
+      .filter((n) => n.id !== message.sourceNodeId)
+      .map((n) => (n.id === message.targetNodeId ? mergedNode : n));
+
+    history?.record(roadmap);
+    return { roadmap: { ...roadmap, nodes, edges, updatedAt: now }, errors: [], changed: true };
+  }
+
+  if (message.type === "splitNode") {
+    const nodeIndex = roadmap.nodes.findIndex((n) => n.id === message.nodeId);
+    if (nodeIndex === -1) {
+      return { roadmap, errors: [`message.nodeId: no node with id "${message.nodeId}" exists in this roadmap`], changed: false };
+    }
+    const node = roadmap.nodes[nodeIndex];
+    const requestedIds = new Set(message.sourceRefTurnIds);
+    const movedRefs = node.sourceRefs.filter((ref) => requestedIds.has(ref.turnId));
+    if (movedRefs.length === 0) {
+      return {
+        roadmap,
+        errors: [`message.sourceRefTurnIds: none of the requested turn ids belong to node "${message.nodeId}"`],
+        changed: false,
+      };
+    }
+    const remainingRefs = node.sourceRefs.filter((ref) => !requestedIds.has(ref.turnId));
+
+    const nodeIds = new Set(roadmap.nodes.map((n) => n.id));
+    const newNode: RoadmapNode = {
+      id: generateUniqueId("node", nodeIds),
+      title: message.title,
+      summary: "",
+      status: "open",
+      tags: [],
+      notes: "",
+      sourceRefs: movedRefs,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const updatedOriginal: RoadmapNode = { ...node, sourceRefs: remainingRefs, updatedAt: now };
+
+    const edgeIds = new Set(roadmap.edges.map((e) => e.id));
+    const splitEdge: RoadmapEdge = {
+      id: generateUniqueId("edge", edgeIds),
+      source: node.id,
+      target: newNode.id,
+      // A split is a user-driven structural edit, not an AI-generated
+      // topic/branch, so the connecting edge is "manual" like other
+      // user-defined edges.
+      kind: "manual",
+    };
+
+    const nodes = [...roadmap.nodes];
+    nodes[nodeIndex] = updatedOriginal;
+    nodes.push(newNode);
+
+    history?.record(roadmap);
+    return { roadmap: { ...roadmap, nodes, edges: [...roadmap.edges, splitEdge], updatedAt: now }, errors: [], changed: true };
+  }
+
   const nodeIndex = roadmap.nodes.findIndex((n) => n.id === message.nodeId);
   if (nodeIndex === -1) {
     return { roadmap, errors: [`message.nodeId: no node with id "${message.nodeId}" exists in this roadmap`], changed: false };
   }
 
-  const now = new Date().toISOString();
   const existing = roadmap.nodes[nodeIndex];
   let updated: RoadmapNode;
 
@@ -240,6 +527,7 @@ export function applyWebviewMessage(roadmap: Roadmap, rawMessage: unknown): Appl
     }
   }
 
+  history?.record(roadmap);
   const nodes = [...roadmap.nodes];
   nodes[nodeIndex] = updated;
   return { roadmap: { ...roadmap, nodes, updatedAt: now }, errors: [], changed: true };

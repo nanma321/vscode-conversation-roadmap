@@ -19,6 +19,8 @@ import { VsCodeApi } from "./vscodeApi";
 export interface InitialState {
   roadmap: Roadmap;
   turns: TurnRecord[];
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 type ViewMode = "graph" | "outline" | "transcript";
@@ -30,6 +32,8 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [viewMode, setViewMode] = React.useState<ViewMode>("graph");
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [canUndo, setCanUndo] = React.useState<boolean>(Boolean(initialState.canUndo));
+  const [canRedo, setCanRedo] = React.useState<boolean>(Boolean(initialState.canRedo));
 
   React.useEffect(() => {
     function onMessage(event: MessageEvent<HostToWebviewMessage>): void {
@@ -40,6 +44,8 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
       if (message.type === "state") {
         setRoadmap(message.roadmap);
         setTurns(message.turns);
+        setCanUndo(message.canUndo);
+        setCanRedo(message.canRedo);
         // Deselect if the previously selected node no longer exists (e.g. it
         // was removed by a structural edit elsewhere), rather than pointing
         // the details panel at stale data.
@@ -66,6 +72,45 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
     (nodeId: string, position: { x: number; y: number }) => post({ type: "moveNode", nodeId, position }),
     [post]
   );
+
+  const handleAddEdge = React.useCallback(
+    (source: string, target: string) => post({ type: "addEdge", source, target }),
+    [post]
+  );
+
+  const handleDeleteEdge = React.useCallback(
+    (edgeId: string) => {
+      // Removing an edge discards structure the user (or the summarizer)
+      // created and cannot be undone from the canvas itself, so confirm
+      // before sending the destructive message to the host.
+      if (window.confirm("Delete this connection between nodes?")) {
+        post({ type: "deleteEdge", edgeId });
+      }
+    },
+    [post]
+  );
+
+  const handleMergeNodes = React.useCallback(
+    (sourceNodeId: string, targetNodeId: string) => {
+      const sourceTitle = roadmap.nodes.find((n) => n.id === sourceNodeId)?.title || "(untitled)";
+      const targetTitle = roadmap.nodes.find((n) => n.id === targetNodeId)?.title || "(untitled)";
+      // Merging removes the source node entirely (its content is folded
+      // into the target); confirm since this cannot be undone from the
+      // canvas, only via the Undo command.
+      if (window.confirm(`Merge "${sourceTitle}" into "${targetTitle}"? "${sourceTitle}" will be removed.`)) {
+        post({ type: "mergeNodes", sourceNodeId, targetNodeId });
+      }
+    },
+    [post, roadmap]
+  );
+
+  const handleSplitNode = React.useCallback(
+    (nodeId: string, title: string, sourceRefTurnIds: string[]) => post({ type: "splitNode", nodeId, title, sourceRefTurnIds }),
+    [post]
+  );
+
+  const handleUndo = React.useCallback(() => post({ type: "undo" }), [post]);
+  const handleRedo = React.useCallback(() => post({ type: "redo" }), [post]);
 
   const selectedNode = roadmap.nodes.find((n) => n.id === selectedNodeId) ?? null;
   const turnsById = React.useMemo(() => new Map(turns.map((t) => [t.id, t])), [turns]);
@@ -97,6 +142,13 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
         >
           Session transcript
         </button>
+        <span className="toolbar-spacer" />
+        <button type="button" onClick={handleUndo} disabled={!canUndo} aria-label="Undo last change">
+          Undo
+        </button>
+        <button type="button" onClick={handleRedo} disabled={!canRedo} aria-label="Redo last undone change">
+          Redo
+        </button>
       </div>
 
       {errorMessage ? (
@@ -117,7 +169,14 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
             automatically as topics are captured.
           </p>
         ) : viewMode === "graph" ? (
-          <GraphView roadmap={roadmap} selectedNodeId={selectedNodeId} onSelectNode={handleSelectNode} onMoveNode={handleMoveNode} />
+          <GraphView
+            roadmap={roadmap}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={handleSelectNode}
+            onMoveNode={handleMoveNode}
+            onAddEdge={handleAddEdge}
+            onDeleteEdge={handleDeleteEdge}
+          />
         ) : (
           <OutlineView roadmap={roadmap} selectedNodeId={selectedNodeId} onSelectNode={handleSelectNode} />
         )}
@@ -125,6 +184,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
         {viewMode === "transcript" ? null : (
           <NodeDetailsPanel
             node={selectedNode}
+            roadmap={roadmap}
             turnsById={turnsById}
             onRename={(title) => selectedNodeId && post({ type: "renameNode", nodeId: selectedNodeId, title })}
             onUpdateNotes={(notes) => selectedNodeId && post({ type: "updateNotes", nodeId: selectedNodeId, notes })}
@@ -133,6 +193,8 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
             onToggleHighlight={(highlighted) =>
               selectedNodeId && post({ type: "toggleHighlight", nodeId: selectedNodeId, highlighted })
             }
+            onMergeInto={(targetNodeId) => selectedNodeId && handleMergeNodes(selectedNodeId, targetNodeId)}
+            onSplit={(title, sourceRefTurnIds) => selectedNodeId && handleSplitNode(selectedNodeId, title, sourceRefTurnIds)}
           />
         )}
       </div>
