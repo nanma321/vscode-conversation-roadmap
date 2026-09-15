@@ -1,0 +1,254 @@
+/**
+ * Styling for the graph Webview (Phase 5). Uses VS Code theme CSS variables
+ * throughout so the graph matches the active color theme automatically.
+ */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--vscode-font-family, sans-serif);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--vscode-panel-border, #888);
+}
+
+.toolbar button {
+  background: var(--vscode-button-secondaryBackground, #333);
+  color: var(--vscode-button-secondaryForeground, inherit);
+  border: 1px solid var(--vscode-panel-border, #888);
+  border-radius: 4px;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+}
+
+.toolbar button.active {
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+}
+
+.error-banner {
+  background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+  color: var(--vscode-inputValidation-errorForeground, #fff);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.graph-canvas {
+  flex: 1;
+  min-width: 0;
+}
+
+.outline-view {
+  flex: 1;
+  overflow: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem;
+}
+
+.outline-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: none;
+  border-left: 3px solid transparent;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+
+.outline-item.selected {
+  background: var(--vscode-list-activeSelectionBackground, #094771);
+  color: var(--vscode-list-activeSelectionForeground, #fff);
+}
+
+.outline-item.highlighted {
+  font-weight: bold;
+}
+
+.details-panel {
+  width: 320px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--vscode-panel-border, #888);
+  padding: 0.75rem;
+  box-sizing: border-box;
+}
+
+.field {
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.field input[type="text"],
+.field textarea {
+  background: var(--vscode-input-background, #3c3c3c);
+  color: var(--vscode-input-foreground, inherit);
+  border: 1px solid var(--vscode-input-border, transparent);
+  padding: 0.3rem;
+  font-family: inherit;
+}
+
+.color-swatches {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.swatch.selected {
+  border-color: var(--vscode-focusBorder, #007acc);
+}
+
+.swatch.clear {
+  background: transparent;
+  border: 1px solid var(--vscode-panel-border, #888);
+  color: inherit;
+}
+
+.transcript {
+  margin-top: 1rem;
+  border-top: 1px solid var(--vscode-panel-border, #888);
+  padding-top: 0.5rem;
+}
+
+.transcript-turn {
+  margin-bottom: 0.75rem;
+}
+
+.transcript-meta {
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+
+.empty {
+  opacity: 0.7;
+  font-style: italic;
+  padding: 1rem;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 8px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #fff);
+}
+
+.roadmap-flow-node {
+  border-radius: 6px;
+  border: 1px solid var(--vscode-panel-border, #888);
+  padding: 0.5rem 0.75rem;
+  color: var(--vscode-button-foreground, #fff);
+  min-width: 140px;
+}
+
+.roadmap-flow-node.selected {
+  outline: 2px solid var(--vscode-focusBorder, #007acc);
+}
+
+.roadmap-flow-node.highlighted {
+  box-shadow: 0 0 0 2px gold;
+}
+
+.roadmap-flow-node-title {
+  font-weight: bold;
+  margin-bottom: 0.25rem;
+}
+
+.roadmap-flow-node-meta {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.roadmap-flow-node-tags {
+  margin-top: 0.25rem;
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.tag {
+  font-size: 0.7em;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0 0.3rem;
+  border-radius: 6px;
+}
+
+.session-transcript-view {
+  flex: 1;
+  overflow: auto;
+  padding: 0.75rem;
+}
+
+.session-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.session-chip {
+  padding: 0.25rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid var(--vscode-panel-border, #888);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+
+.session-chip.selected {
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+  border-color: transparent;
+}
+
+.session-turn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.session-turn {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--vscode-panel-border, #888);
+}
+
+.session-turn.incomplete {
+  opacity: 0.7;
+}

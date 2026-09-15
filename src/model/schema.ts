@@ -26,6 +26,7 @@ import {
   RoadmapSettings,
   SourceReference,
 } from "./types";
+import { HEX_COLOR_PATTERN } from "./colorPattern";
 
 /** Declarative description of the version-1 document schema, for documentation and tests. */
 export const SCHEMA_DESCRIPTION = {
@@ -132,6 +133,14 @@ function validateNode(value: unknown, path: string, errors: string[]): value is 
     ok = false;
   }
   if (!validateNodePosition(value.position, `${path}.position`, errors)) {
+    ok = false;
+  }
+  if (value.color !== undefined && (typeof value.color !== "string" || !HEX_COLOR_PATTERN.test(value.color))) {
+    pushError(errors, `${path}.color`, "must be a #rgb or #rrggbb hex color string when present");
+    ok = false;
+  }
+  if (value.highlighted !== undefined && typeof value.highlighted !== "boolean") {
+    pushError(errors, `${path}.highlighted`, "must be a boolean when present");
     ok = false;
   }
   if (!Array.isArray(value.sourceRefs)) {

@@ -102,6 +102,18 @@ export interface RoadmapNode {
   notes: string;
   /** Manual layout position, if the user has moved this node; undefined means "let the layout engine place it". */
   position?: NodePosition;
+  /**
+   * User-chosen display color for this node in the graph Webview (Phase 5),
+   * as a `#rgb` or `#rrggbb` hex string. Undefined means "use the default
+   * color for this node's type/status". Never set automatically.
+   */
+  color?: string;
+  /**
+   * Whether the user has highlighted this node in the graph Webview (Phase
+   * 5), e.g. to call out a node of current interest. Purely a user-facing
+   * affordance; never set automatically.
+   */
+  highlighted?: boolean;
   /** Source turns this node was derived from. Must contain at least one entry for AI-generated nodes. */
   sourceRefs: SourceReference[];
   /** ISO-8601 creation timestamp. */

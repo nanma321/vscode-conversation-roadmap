@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { TurnStore } from "./turnStore";
+import { RoadmapStore } from "./model/roadmapStore";
 import { registerRoadmapParticipant } from "./chatParticipant";
 import { showGraphWebview, updateGraph } from "./webviewPanel";
 
@@ -9,6 +10,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Graph" command re-reading this same directory after a restart).
   const store = new TurnStore(context.globalStorageUri.fsPath);
   await store.load();
+
+  // The domain-model roadmap graph (Phase 2/5) is persisted separately from
+  // raw captured turns, in its own file under the same storage directory.
+  const roadmapStore = new RoadmapStore(context.globalStorageUri.fsPath);
+  await roadmapStore.load();
 
   // Live refresh: whenever a new turn is captured, push it into the open graph
   // panel (a no-op if the panel isn't open) so the graph updates in real time.
@@ -21,8 +27,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     async () => {
       // Reload from disk each time the command runs so the graph reflects
       // turns captured in prior sessions, confirming reload behavior.
-      const turns = await store.load();
-      showGraphWebview(context, turns);
+      await store.load();
+      await showGraphWebview(context, store, roadmapStore);
     }
   );
   context.subscriptions.push(openGraphCommand);

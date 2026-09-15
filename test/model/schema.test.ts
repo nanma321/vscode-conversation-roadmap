@@ -136,4 +136,63 @@ describe("validateRoadmapDocument", () => {
     assert.strictEqual(result.valid, false);
     assert.ok(result.errors.some((e) => e.includes("sourceRefs")));
   });
+
+  it("accepts a node with a valid 3-digit hex color", () => {
+    const doc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    (doc.roadmaps[0].nodes[0] as any).color = "#abc";
+    const result = validateRoadmapDocument(doc);
+    assert.strictEqual(result.valid, true);
+  });
+
+  it("accepts a node with a valid 6-digit hex color", () => {
+    const doc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    (doc.roadmaps[0].nodes[0] as any).color = "#a1b2c3";
+    const result = validateRoadmapDocument(doc);
+    assert.strictEqual(result.valid, true);
+  });
+
+  it("accepts a node without a color (optional field)", () => {
+    const doc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    const result = validateRoadmapDocument(doc);
+    assert.strictEqual(result.valid, true);
+  });
+
+  it("rejects a node with a malformed hex color string", () => {
+    const doc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    (doc.roadmaps[0].nodes[0] as any).color = "not-a-color";
+    const result = validateRoadmapDocument(doc);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes(".color")));
+  });
+
+  it("rejects a node with a non-string color", () => {
+    const doc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    (doc.roadmaps[0].nodes[0] as any).color = 12345;
+    const result = validateRoadmapDocument(doc);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes(".color")));
+  });
+
+  it("accepts a node with highlighted set to true or false", () => {
+    for (const highlighted of [true, false]) {
+      const doc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+      (doc.roadmaps[0].nodes[0] as any).highlighted = highlighted;
+      const result = validateRoadmapDocument(doc);
+      assert.strictEqual(result.valid, true, `expected highlighted=${highlighted} to be valid`);
+    }
+  });
+
+  it("accepts a node without a highlighted field (optional)", () => {
+    const doc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    const result = validateRoadmapDocument(doc);
+    assert.strictEqual(result.valid, true);
+  });
+
+  it("rejects a node with a non-boolean highlighted field", () => {
+    const doc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    (doc.roadmaps[0].nodes[0] as any).highlighted = "yes";
+    const result = validateRoadmapDocument(doc);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes(".highlighted")));
+  });
 });

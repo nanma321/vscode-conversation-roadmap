@@ -8,6 +8,10 @@
  */
 import * as fs from "fs";
 import * as path from "path";
+import { LEGACY_SESSION_ID } from "./legacySessionId";
+
+/** Re-exported for backward compatibility; import directly from `legacySessionId.ts` in browser-bundled (Webview) code to avoid pulling in this module's `fs`/`path` dependency. */
+export { LEGACY_SESSION_ID };
 
 /**
  * A reference (e.g. a file, selection, or other attached context) that was
@@ -51,9 +55,6 @@ export interface TurnRecord {
    */
   references: TurnReference[];
 }
-
-const LEGACY_SESSION_ID = "legacy";
-
 
 const STORE_FILE_NAME = "turns.json";
 

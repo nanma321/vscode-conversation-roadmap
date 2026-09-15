@@ -12,15 +12,24 @@ no domain model, schema, or summarization yet (see later phases).
 - Each request/response turn is logged to local disk
   (`src/turnStore.ts`), using only `context.globalStorageUri` and Node's
   `fs` module - no undocumented VS Code APIs.
-- A basic Webview (`src/webviewPanel.ts`) renders a live graph of
-  captured turns; selecting a node reveals its stored source request and
-  response text. The graph updates in real time as new turns arrive
-  (`TurnStore.onDidChange` -> `postMessage`), preserving the selected node.
-- Turns are grouped into **sessions**: a new chat starts a fresh roadmap
-  (detected when the chat has no prior `@roadmap` history), while earlier
-  chats stay selectable via the session chips at the top of the graph. The
-  view follows the newest chat by default until you click into an older one.
-  Turns persisted before sessions existed are grouped as "Earlier turns".
+- A graph Webview (`src/webviewPanel.ts` + `src/webview/`, a React + React
+  Flow app bundled with `esbuild.js` into `media/graph.js`) renders the
+  persisted roadmap graph: pan/zoom/minimap/fit-to-view, node selection with
+  a transcript detail panel, dragging to reposition nodes, and editing a
+  node's title, notes, tags, color, and highlight state. An accessible
+  outline/tree view is available as a keyboard-only alternative to the
+  canvas. A third "Session transcript" view lets you browse the raw
+  captured turns grouped by chat **session** via session chips at the top -
+  a new chat starts a fresh session, older sessions stay selectable, the
+  view follows the newest session by default until you click into an older
+  one, and turns persisted before sessions existed are grouped as "Earlier
+  turns". Every edit is sent as a Webview message that the extension host
+  validates (`src/webviewMessages.ts`) before persisting it via
+  `RoadmapStore`, so edits survive a reload and a malformed message can
+  never corrupt the graph. The Webview's Content-Security-Policy disallows
+  everything by default and only allows scripts tied to a per-load nonce;
+  `style-src` additionally allows `'unsafe-inline'` so React can apply
+  inline styles (color swatches, outline indentation).
 - Storage survives a reload: the "Roadmap: Open Graph" command re-reads
   `turns.json` from disk every time it runs, so turns captured in a prior
   session are still shown after a restart.
@@ -42,9 +51,9 @@ the Chat view, and address a message to `@roadmap`. Run the
 npm test
 ```
 
-Unit tests cover `TurnStore` (`test/turnStore.test.ts`): empty startup,
-append + read-back, persistence across a fresh `TurnStore` instance
-(simulating a restart), preservation of incomplete/cancelled turns,
-lookup of a node's source messages by id, `onDidChange` change
-notifications (used for live graph refresh), and normalization of
-legacy turns that predate the session model.
+Unit tests cover `TurnStore` (`test/turnStore.test.ts`), the domain model
+(`test/model/`), incremental summarization (`test/summarization/`), the
+graph Webview's message validation (`test/webviewMessages.test.ts`) - every
+message shape the Webview can send to the extension host, including
+malformed/unrecognized ones, and that edits apply only to the targeted node
+- and its auto-layout fallback (`test/webview/layout.test.ts`).

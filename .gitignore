@@ -1,3 +1,7 @@
 out/
 node_modules/
 *.vsix
+media/graph.js
+media/graph.js.map
+media/graph.css
+media/graph.css.map
