@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { TurnStore } from "./turnStore";
 import { RoadmapStore } from "./model/roadmapStore";
 import { registerRoadmapParticipant } from "./chatParticipant";
-import { showGraphWebview, updateGraph, resumeSelectedNode } from "./webviewPanel";
+import { disposeGraphWebview, showGraphWebview, updateGraph, resumeSelectedNode } from "./webviewPanel";
 import { exportMarkdownOutlineCommand, exportRoadmapCommand, importRoadmapCommand } from "./importExportCommands";
 import { deleteAllDataCommand } from "./dataDeletion";
 import { RequestSummary, SummarizationService } from "./summarization/summarizationService";
@@ -130,7 +130,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
-  // No explicit teardown needed: TurnStore writes are flushed synchronously
-  // after each append, and the chat participant/webview are disposed via
-  // context.subscriptions.
+  // Explicitly close the editor tab before VS Code persists its window layout.
+  // Captured turns and roadmap edits are already durable and remain available
+  // through "Roadmap: Open Graph" after the next launch.
+  disposeGraphWebview();
 }

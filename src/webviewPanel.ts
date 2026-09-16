@@ -36,6 +36,19 @@ let currentSelectedNodeId: string | null = null;
 /** Undo/redo transaction history (Phase 6) for the single open roadmap; recreated each time the panel is (re)opened. */
 let currentHistory: RoadmapHistory = new RoadmapHistory();
 
+/**
+ * Closes the graph editor without changing any persisted turns or roadmap
+ * data. Called during extension shutdown so VS Code does not restore a stale
+ * Roadmap Graph tab the next time the window opens.
+ */
+export function disposeGraphWebview(): void {
+  currentPanel?.dispose();
+  currentPanel = undefined;
+  currentRoadmapStore = undefined;
+  currentTurnStore = undefined;
+  currentSelectedNodeId = null;
+}
+
 function getNonce(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let text = "";
@@ -270,6 +283,9 @@ export async function showGraphWebview(
 
   panel.onDidDispose(() => {
     currentPanel = undefined;
+    currentRoadmapStore = undefined;
+    currentTurnStore = undefined;
+    currentSelectedNodeId = null;
   }, null, context.subscriptions);
 
   currentPanel = panel;
