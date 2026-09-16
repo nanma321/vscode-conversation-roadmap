@@ -15,8 +15,10 @@
  *   - invalid or malformed model output leaves the roadmap unchanged, and
  *   - user-authored fields are never overwritten.
  * It additionally guarantees only one summarization runs at a time (concurrent
- * requests are chained) and that a turn is attempted at most once, so a turn the
- * model chooses not to reference does not trigger repeated work.
+ * requests are chained), that a turn is attempted at most once (so a turn the
+ * model chooses not to reference does not trigger repeated work), and that each
+ * chat session is summarized against only its own existing nodes so a new chat
+ * starts its own sub-graph instead of being linked onto an earlier session.
  */
 import { RoadmapStore } from "../model/roadmapStore";
 import { loadDefaultRoadmap, saveRoadmap } from "../model/defaultRoadmap";
@@ -63,6 +65,21 @@ function toTurn(record: TurnRecord): Turn {
     completed: record.completed,
     references: record.references ?? [],
   };
+}
+
+/**
+ * A view of `roadmap` containing only the nodes derived from `sessionId` (and
+ * the edges among them). Used as the *existing graph* shown to the model when
+ * summarizing that session, so the model can only continue/branch within the
+ * same chat and a new chat therefore starts its own sub-graph. Nodes without
+ * any source turns (e.g. resume branches) carry no session and are excluded
+ * from this context.
+ */
+function sessionScopedRoadmap(roadmap: Roadmap, sessionId: string): Roadmap {
+  const nodes = roadmap.nodes.filter((n) => n.sourceRefs.some((r) => r.sessionId === sessionId));
+  const keptIds = new Set(nodes.map((n) => n.id));
+  const edges = roadmap.edges.filter((e) => keptIds.has(e.source) && keptIds.has(e.target));
+  return { ...roadmap, nodes, edges };
 }
 
 export class SummarizationService {
@@ -123,27 +140,61 @@ export class SummarizationService {
       this.attemptedTurnIds.add(t.id);
     }
 
-    const turns = pending.map(toTurn);
-    const prompt = buildSummarizationPrompt(turns, roadmap);
+    // Summarize one session at a time. Each session's prompt is given only the
+    // nodes from that *same* session as existing context, so a new chat starts
+    // its own sub-graph instead of the model linking (continuing/branching) the
+    // new turns onto an unrelated earlier session's nodes. Changes still apply
+    // to the full roadmap, so other sessions' nodes are preserved.
+    let currentRoadmap = roadmap;
+    let changedAny = false;
+    const errors: string[] = [];
 
-    let rawResponse: string;
-    try {
-      rawResponse = await this.requestSummary(prompt);
-    } catch (err) {
-      return { changed: false, roadmap, errors: [`summarization request failed: ${(err as Error).message}`] };
+    for (const sessionId of this.orderedSessionIds(pending)) {
+      const sessionTurns = pending.filter((t) => t.sessionId === sessionId).map(toTurn);
+      const scopedRoadmap = sessionScopedRoadmap(currentRoadmap, sessionId);
+      const prompt = buildSummarizationPrompt(sessionTurns, scopedRoadmap);
+
+      let rawResponse: string;
+      try {
+        rawResponse = await this.requestSummary(prompt);
+      } catch (err) {
+        errors.push(`summarization request failed for ${sessionId}: ${(err as Error).message}`);
+        continue;
+      }
+
+      const parsed = parseModelJson(rawResponse);
+      if (parsed === undefined) {
+        errors.push(`summarization response for ${sessionId} was not valid JSON`);
+        continue;
+      }
+
+      const result: SummarizationResult = summarizeIncrementally(currentRoadmap, parsed, sessionTurns);
+      if (result.changed) {
+        currentRoadmap = result.roadmap;
+        changedAny = true;
+      } else {
+        errors.push(...result.errors);
+      }
     }
 
-    const parsed = parseModelJson(rawResponse);
-    if (parsed === undefined) {
-      return { changed: false, roadmap, errors: ["summarization response was not valid JSON"] };
+    if (!changedAny) {
+      return { changed: false, roadmap: currentRoadmap, errors };
     }
 
-    const result: SummarizationResult = summarizeIncrementally(roadmap, parsed, turns);
-    if (!result.changed) {
-      return { changed: false, roadmap: result.roadmap, errors: result.errors };
-    }
+    await saveRoadmap(this.roadmapStore, currentRoadmap);
+    return { changed: true, roadmap: currentRoadmap, errors };
+  }
 
-    await saveRoadmap(this.roadmapStore, result.roadmap);
-    return { changed: true, roadmap: result.roadmap, errors: [] };
+  /** The distinct session ids present in `turns`, in first-appearance order. */
+  private orderedSessionIds(turns: TurnRecord[]): string[] {
+    const order: string[] = [];
+    const seen = new Set<string>();
+    for (const t of turns) {
+      if (!seen.has(t.sessionId)) {
+        seen.add(t.sessionId);
+        order.push(t.sessionId);
+      }
+    }
+    return order;
   }
 }

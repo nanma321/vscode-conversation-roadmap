@@ -23,6 +23,18 @@ async function seedTurn(store: TurnStore, id: string, request: string, completed
   });
 }
 
+async function seedTurnInSession(store: TurnStore, id: string, sessionId: string, request: string): Promise<void> {
+  await store.append({
+    id,
+    sessionId,
+    timestamp: new Date().toISOString(),
+    request,
+    response: `answer to ${request}`,
+    completed: true,
+    references: [],
+  });
+}
+
 /** A model response that creates one topic node from the given turn id. */
 function topicResponse(turnId: string, title = "A topic"): string {
   return JSON.stringify({
@@ -169,5 +181,68 @@ describe("SummarizationService", () => {
 
     assert.strictEqual(called, false);
     assert.strictEqual(outcome.changed, false);
+  });
+
+  it("starts a new sub-graph for a new session instead of linking onto an earlier one", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+
+    const prompts: string[] = [];
+    const service = new SummarizationService(turnStore, roadmapStore, async (prompt) => {
+      prompts.push(prompt);
+      const m = /Turn id: (\S+)/.exec(prompt);
+      const turnId = m ? m[1] : "unknown";
+      return topicResponse(turnId, `Topic ${turnId}`);
+    });
+
+    // Session 1: one turn -> one node.
+    await seedTurnInSession(turnStore, "t1", "session-1", "first topic");
+    await service.summarizeNewTurns();
+
+    // Session 2 (a new chat): another turn.
+    await seedTurnInSession(turnStore, "t2", "session-2", "unrelated topic");
+    await service.summarizeNewTurns();
+
+    const roadmap = await loadDefaultRoadmap(roadmapStore);
+    assert.strictEqual(roadmap.nodes.length, 2, "each session should contribute its own node");
+    assert.strictEqual(roadmap.edges.length, 0, "there must be no edge linking the two sessions' nodes");
+
+    // The prompt used for session 2 must not have shown session 1's node as
+    // existing context (otherwise the model could continue/branch onto it).
+    const session2Prompt = prompts.find((p) => p.includes("Turn id: t2"));
+    assert.ok(session2Prompt, "expected a prompt for the session-2 turn");
+    assert.ok(session2Prompt!.includes("currently empty"), "session-2 prompt should present an empty graph");
+    assert.ok(!session2Prompt!.includes("Topic t1"), "session-2 prompt must not include session-1's node");
+  });
+
+  it("still shows a session its own earlier nodes as context for continuation", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+
+    const prompts: string[] = [];
+    const service = new SummarizationService(turnStore, roadmapStore, async (prompt) => {
+      prompts.push(prompt);
+      const m = /Turn id: (\S+)/.exec(prompt);
+      const turnId = m ? m[1] : "unknown";
+      return topicResponse(turnId, `Topic ${turnId}`);
+    });
+
+    await seedTurnInSession(turnStore, "t1", "session-1", "first");
+    await service.summarizeNewTurns();
+    await seedTurnInSession(turnStore, "t3", "session-1", "follow-up");
+    await service.summarizeNewTurns();
+
+    const followUpPrompt = prompts.find((p) => p.includes("Turn id: t3"));
+    assert.ok(followUpPrompt, "expected a prompt for the follow-up turn");
+    assert.ok(
+      followUpPrompt!.includes("Topic t1"),
+      "a follow-up in the same session should see that session's existing node as context"
+    );
   });
 });
