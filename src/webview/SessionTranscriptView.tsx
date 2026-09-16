@@ -16,6 +16,7 @@ import * as React from "react";
 import type { TurnRecord } from "../turnStore";
 import { LEGACY_SESSION_ID } from "../legacySessionId";
 import { Markdown } from "./Markdown";
+import { deriveSessionLabel } from "./sessionFilter";
 
 interface SessionGroup {
   sessionId: string;
@@ -63,8 +64,8 @@ export function SessionTranscriptView(props: { turns: TurnRecord[] }): React.JSX
   return (
     <div className="session-transcript-view">
       <div className="session-chips" role="tablist" aria-label="Chat sessions">
-        {groups.map((group, index) => {
-          const label = group.sessionId === LEGACY_SESSION_ID ? "Earlier turns" : `Chat ${index + 1}`;
+        {groups.map((group) => {
+          const label = deriveSessionLabel(group.sessionId, turns);
           const selected = group.sessionId === active.sessionId;
           return (
             <button

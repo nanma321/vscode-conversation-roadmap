@@ -29,9 +29,9 @@ no domain model, schema, or summarization yet (see later phases).
   outline/tree view is available as a keyboard-only alternative to the
   canvas. The roadmap graph is **cumulative** (every chat's summarized
   turns accumulate into one persistent graph); a **Session** filter in the
-  toolbar can narrow the graph/outline to a single chat (labeled to match
-  the transcript's "Chat N" chips) as a view-only transform that never
-  changes the persisted roadmap. A third "Session transcript" view lets you
+  toolbar can narrow the graph/outline to a single chat (labeled from that
+  session's first `@roadmap` request plus its date) as a view-only transform
+  that never changes the persisted roadmap. A third "Session transcript" view lets you
   browse the raw captured turns grouped by chat **session** via session
   chips at the top - a new chat starts a fresh session, older sessions stay
   selectable, the view follows the newest session by default until you click
@@ -141,4 +141,3 @@ preserved).
   cleans up any orphaned `*.tmp-*` file left behind by a write that was
   interrupted (e.g. a crash) between that temp-file write and the rename,
   without ever touching the real, already-persisted file.
-

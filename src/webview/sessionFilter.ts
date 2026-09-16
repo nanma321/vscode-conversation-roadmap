@@ -26,6 +26,32 @@ export interface SessionOption {
   nodeCount: number;
 }
 
+const MAX_SESSION_LABEL_LENGTH = 48;
+
+/**
+ * Produces a meaningful, stable user-facing label from the first captured
+ * request in a session instead of an opaque ordinal such as "Chat 2".
+ * The ISO date disambiguates sessions that begin with similar questions.
+ */
+export function deriveSessionLabel(sessionId: string, turns: TurnRecord[]): string {
+  if (sessionId === LEGACY_SESSION_ID) {
+    return "Earlier turns (legacy)";
+  }
+
+  const firstTurn = turns.find((turn) => (turn.sessionId || LEGACY_SESSION_ID) === sessionId);
+  if (!firstTurn) {
+    return "Unknown session";
+  }
+
+  const normalizedRequest = firstTurn.request.replace(/\s+/g, " ").trim();
+  const title =
+    normalizedRequest.length > MAX_SESSION_LABEL_LENGTH
+      ? `${normalizedRequest.slice(0, MAX_SESSION_LABEL_LENGTH - 1)}…`
+      : normalizedRequest || "Untitled chat";
+  const date = /^\d{4}-\d{2}-\d{2}/.exec(firstTurn.timestamp)?.[0];
+  return date ? `${title} · ${date}` : title;
+}
+
 /** Session ids a node belongs to, derived from the turns it was summarized from. */
 export function nodeSessionIds(sourceRefs: { sessionId: string }[]): Set<string> {
   return new Set(sourceRefs.map((r) => r.sessionId));
@@ -50,8 +76,8 @@ function sessionOrder(turns: TurnRecord[]): string[] {
 
 /**
  * Builds the list of sessions that actually have nodes in `roadmap`, labeled
- * ("Chat N", or "Earlier turns" for the legacy session) using the same
- * first-appearance ordering as the transcript view.
+ * from each session's first request and date using the same first-appearance
+ * ordering as the transcript view.
  */
 export function deriveSessionOptions(roadmap: Roadmap, turns: TurnRecord[]): SessionOption[] {
   const counts = new Map<string, number>();
@@ -62,13 +88,6 @@ export function deriveSessionOptions(roadmap: Roadmap, turns: TurnRecord[]): Ses
   }
 
   const order = sessionOrder(turns);
-  const labelFor = (sid: string): string => {
-    if (sid === LEGACY_SESSION_ID) {
-      return "Earlier turns";
-    }
-    const index = order.indexOf(sid);
-    return index >= 0 ? `Chat ${index + 1}` : "Other";
-  };
 
   // Sessions that have nodes, ordered by first appearance; any node session not
   // present in the turn ordering (unexpected) is appended at the end.
@@ -77,7 +96,11 @@ export function deriveSessionOptions(roadmap: Roadmap, turns: TurnRecord[]): Ses
     ...[...counts.keys()].filter((sid) => !order.includes(sid)),
   ];
 
-  return orderedIds.map((id) => ({ id, label: labelFor(id), nodeCount: counts.get(id) ?? 0 }));
+  return orderedIds.map((id) => ({
+    id,
+    label: deriveSessionLabel(id, turns),
+    nodeCount: counts.get(id) ?? 0,
+  }));
 }
 
 /**

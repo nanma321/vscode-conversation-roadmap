@@ -1,5 +1,10 @@
 import * as assert from "assert";
-import { deriveSessionOptions, filterRoadmapBySession, nodeSessionIds } from "../../src/webview/sessionFilter";
+import {
+  deriveSessionLabel,
+  deriveSessionOptions,
+  filterRoadmapBySession,
+  nodeSessionIds,
+} from "../../src/webview/sessionFilter";
 import { createDefaultSettings, Roadmap, RoadmapEdge, RoadmapNode } from "../../src/model/types";
 import type { TurnRecord } from "../../src/turnStore";
 
@@ -40,6 +45,28 @@ function turn(id: string, sessionId: string): TurnRecord {
   return { id, sessionId, timestamp: NOW, request: "q", response: "a", completed: true, references: [] };
 }
 
+describe("deriveSessionLabel", () => {
+  it("uses the first request and date instead of an opaque chat number", () => {
+    const turns = [
+      { ...turn("t1", "s1"), request: "What is a loop in AI?" },
+      { ...turn("t2", "s1"), request: "A later follow-up" },
+    ];
+    assert.strictEqual(deriveSessionLabel("s1", turns), "What is a loop in AI? · 2026-01-01");
+  });
+
+  it("normalizes whitespace and truncates a very long first request", () => {
+    const request = `A   long\nrequest ${"x".repeat(80)}`;
+    const label = deriveSessionLabel("s1", [{ ...turn("t1", "s1"), request }]);
+    assert.ok(label.endsWith("… · 2026-01-01"));
+    assert.ok(!label.includes("\n"));
+  });
+
+  it("labels legacy and missing sessions explicitly", () => {
+    assert.strictEqual(deriveSessionLabel("legacy", [turn("t1", "legacy")]), "Earlier turns (legacy)");
+    assert.strictEqual(deriveSessionLabel("missing", []), "Unknown session");
+  });
+});
+
 describe("nodeSessionIds", () => {
   it("collects the distinct sessions of a node's source turns", () => {
     const ids = nodeSessionIds([
@@ -54,22 +81,25 @@ describe("nodeSessionIds", () => {
 describe("deriveSessionOptions", () => {
   it("lists sessions that have nodes, labeled by first-appearance order", () => {
     const roadmap = roadmapWith([node("a", ["s1"]), node("b", ["s2"]), node("c", ["s1"])], []);
-    const turns = [turn("t1", "s1"), turn("t2", "s2")];
+    const turns = [
+      { ...turn("t1", "s1"), request: "First topic" },
+      { ...turn("t2", "s2"), request: "Second topic" },
+    ];
     const options = deriveSessionOptions(roadmap, turns);
 
     assert.deepStrictEqual(
       options.map((o) => ({ id: o.id, label: o.label, nodeCount: o.nodeCount })),
       [
-        { id: "s1", label: "Chat 1", nodeCount: 2 },
-        { id: "s2", label: "Chat 2", nodeCount: 1 },
+        { id: "s1", label: "First topic · 2026-01-01", nodeCount: 2 },
+        { id: "s2", label: "Second topic · 2026-01-01", nodeCount: 1 },
       ]
     );
   });
 
-  it("labels the legacy session as 'Earlier turns'", () => {
+  it("labels the legacy session explicitly", () => {
     const roadmap = roadmapWith([node("a", ["legacy"])], []);
     const options = deriveSessionOptions(roadmap, [turn("t1", "legacy")]);
-    assert.strictEqual(options[0].label, "Earlier turns");
+    assert.strictEqual(options[0].label, "Earlier turns (legacy)");
   });
 
   it("omits sessions that have no nodes", () => {
