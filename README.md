@@ -46,9 +46,10 @@ no domain model, schema, or summarization yet (see later phases).
 - Storage survives a reload: the "Roadmap: Open Graph" command re-reads
   `turns.json` from disk every time it runs, so turns captured in a prior
   session are still shown after a restart.
-- If VS Code restores a Roadmap Graph editor from its saved window layout, the
-  extension closes that stale tab automatically during startup. This does not
-  delete captured turns or graph data; run "Roadmap: Open Graph" to reopen it.
+- The Roadmap Graph opts out of editor restoration. If VS Code tries to revive
+  a graph from its saved window layout, the extension's webview serializer
+  closes that tab instead. This does not delete captured turns or graph data;
+  run "Roadmap: Open Graph" to reopen it.
 
 ## Resume from a Node (Phase 7)
 

@@ -11,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:conversationRoadmap.graph"
   ],
   "main": "./out/src/extension.js",
   "contributes": {

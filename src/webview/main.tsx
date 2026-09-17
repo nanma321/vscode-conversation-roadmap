@@ -20,8 +20,13 @@ const container = document.getElementById("root");
 const initialState = window.__ROADMAP_INITIAL_STATE__;
 
 if (container && initialState) {
+  const vscode = getVsCodeApi();
+  // This marker opts the panel into VS Code's serializer-based restoration
+  // path. The extension host's serializer deliberately disposes restored
+  // graph panels, so the tab does not survive a VS Code restart.
+  vscode.setState({ viewType: "conversationRoadmap.graph" });
   const root = createRoot(container);
-  root.render(<App vscode={getVsCodeApi()} initialState={initialState} />);
+  root.render(<App vscode={vscode} initialState={initialState} />);
 } else if (container) {
   container.textContent = "Unable to load the roadmap graph: no initial state was provided.";
 }

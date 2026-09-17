@@ -72,6 +72,21 @@ export async function closeRestoredGraphTabs(): Promise<void> {
     }
 }
 
+/**
+ * Registers the canonical VS Code restoration hook for this webview type.
+ * The graph deliberately opts out of restoration: when VS Code asks the
+ * extension to revive a saved panel, dispose it instead of rebuilding it.
+ */
+export function registerGraphRestoreDisposal(context: vscode.ExtensionContext): void {
+    context.subscriptions.push(
+      vscode.window.registerWebviewPanelSerializer(GRAPH_VIEW_TYPE, {
+        async deserializeWebviewPanel(panel: vscode.WebviewPanel): Promise<void> {
+          panel.dispose();
+        },
+      })
+    );
+}
+
 function getNonce(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let text = "";

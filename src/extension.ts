@@ -5,6 +5,7 @@ import { registerRoadmapParticipant } from "./chatParticipant";
 import {
   closeRestoredGraphTabs,
   disposeGraphWebview,
+  registerGraphRestoreDisposal,
   showGraphWebview,
   updateGraph,
   resumeSelectedNode,
@@ -14,6 +15,11 @@ import { deleteAllDataCommand } from "./dataDeletion";
 import { RequestSummary, SummarizationService } from "./summarization/summarizationService";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  // Register synchronously before any startup work. The webview stores a small
+  // marker through setState(), causing VS Code to route any attempted restore
+  // through this serializer, which deliberately closes the stale panel.
+  registerGraphRestoreDisposal(context);
+
   // VS Code saves its editor layout before extension deactivation, so a graph
   // tab can be restored even though deactivate() disposed its panel. Remove
   // only this extension's restored webview tabs at startup; persisted roadmap
