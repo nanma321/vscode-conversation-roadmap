@@ -2,6 +2,8 @@ import * as assert from "assert";
 import {
   DEFAULT_NODE_BACKGROUND_FALLBACK,
   DEFAULT_NODE_FOREGROUND_FALLBACK,
+  NEW_NODE_RIBBON_BACKGROUND,
+  NEW_NODE_RIBBON_FOREGROUND,
   NODE_COLOR_SWATCHES,
   contrastRatio,
   contrastingTextColor,
@@ -13,6 +15,13 @@ describe("node color contrast", () => {
   it("meets MAS 1.4.3 for the fixed default node fallbacks", () => {
     assert.ok(
       contrastRatio(DEFAULT_NODE_BACKGROUND_FALLBACK, DEFAULT_NODE_FOREGROUND_FALLBACK) >=
+        MAS_MINIMUM_CONTRAST
+    );
+  });
+
+  it("meets MAS 1.4.3 for the New ribbon text", () => {
+    assert.ok(
+      contrastRatio(NEW_NODE_RIBBON_BACKGROUND, NEW_NODE_RIBBON_FOREGROUND) >=
         MAS_MINIMUM_CONTRAST
     );
   });

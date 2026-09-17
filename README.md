@@ -156,6 +156,10 @@ preserved).
   retaining the captured session transcripts. Cleared transcripts are marked
   as intentionally excluded so they do not recreate old graphs after restart;
   future `@roadmap` turns continue generating new nodes normally.
+- **Newest-node emphasis**: the latest created node or summarization batch is
+  marked with a diagonal **New** corner ribbon (and a New badge in Outline
+  view). The marker survives reloads and moves only when a newer node or
+  creation batch is added.
 - **Contrast-safe nodes**: default nodes use VS Code's editor-widget
   background and foreground tokens instead of unrelated button colors.
   Custom node colors automatically select whichever of black or white has

@@ -415,6 +415,10 @@ function mergeSummaries(targetSummary: string, sourceSummary: string): string {
   return `${target}\n\n${source}`;
 }
 
+function clearNewMarkers(nodes: RoadmapNode[]): RoadmapNode[] {
+  return nodes.map((node) => (node.isNew ? { ...node, isNew: undefined } : node));
+}
+
 /**
  * Validates `rawMessage` (untrusted input from the Webview) and, if valid,
  * applies the edit it describes to `roadmap`. Returns the original
@@ -570,6 +574,7 @@ export function applyWebviewMessage(
       ...target,
       title: message.title ?? target.title,
       summary: mergeSummaries(target.summary, source.summary),
+      isNew: source.isNew || target.isNew ? true : undefined,
       tags: Array.from(new Set([...target.tags, ...source.tags])),
       notes: mergedNotes,
       sourceRefs: unionSourceRefs(target.sourceRefs, source.sourceRefs),
@@ -632,6 +637,7 @@ export function applyWebviewMessage(
       summary: "",
       status: "open",
       nodeType: "topic",
+      isNew: true,
       tags: [],
       // The user's follow-up question (if any) is stored as notes so the intent
       // of the branch is captured even before the resumed turn is answered.
@@ -654,7 +660,12 @@ export function applyWebviewMessage(
 
     history?.record(roadmap);
     return {
-      roadmap: { ...roadmap, nodes: [...roadmap.nodes, branchNode], edges: [...roadmap.edges, branchEdge], updatedAt: now },
+      roadmap: {
+        ...roadmap,
+        nodes: [...clearNewMarkers(roadmap.nodes), branchNode],
+        edges: [...roadmap.edges, branchEdge],
+        updatedAt: now,
+      },
       errors: [],
       changed: true,
     };
@@ -683,13 +694,19 @@ export function applyWebviewMessage(
       title: message.title,
       summary: "",
       status: "open",
+      isNew: true,
       tags: [],
       notes: "",
       sourceRefs: movedRefs,
       createdAt: now,
       updatedAt: now,
     };
-    const updatedOriginal: RoadmapNode = { ...node, sourceRefs: remainingRefs, updatedAt: now };
+    const updatedOriginal: RoadmapNode = {
+      ...node,
+      isNew: undefined,
+      sourceRefs: remainingRefs,
+      updatedAt: now,
+    };
 
     const edgeIds = new Set(roadmap.edges.map((e) => e.id));
     const splitEdge: RoadmapEdge = {
@@ -702,7 +719,7 @@ export function applyWebviewMessage(
       kind: "manual",
     };
 
-    const nodes = [...roadmap.nodes];
+    const nodes = clearNewMarkers(roadmap.nodes);
     nodes[nodeIndex] = updatedOriginal;
     nodes.push(newNode);
 

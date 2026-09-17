@@ -97,6 +97,8 @@ export interface RoadmapNode {
   status: NodeStatus;
   /** True after the user changes status, preventing later automatic summaries from overwriting it. */
   statusEdited?: boolean;
+  /** True for the most recently created node or creation batch, until a newer node is created. */
+  isNew?: boolean;
   /**
    * What kind of thing this node represents (topic, decision, question, task,
    * outcome, or blocker). Optional for backward compatibility with documents

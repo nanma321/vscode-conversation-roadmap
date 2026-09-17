@@ -241,12 +241,16 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
         <span className="toolbar-spacer" />
         <button
           type="button"
-          className="danger-toolbar-button"
+          className="toolbar-action-button danger-toolbar-button"
+          aria-label="Clear all graphs and keep captured transcripts"
           title="Delete every graph while keeping captured transcripts"
           disabled={roadmap.nodes.length === 0}
           onClick={() => post({ type: "clearAllRoadmaps" })}
         >
-          Clear all graphs
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+            <path d="M5.25 2.75h5.5M3.5 4.75h9M5 4.75l.5 8h5l.5-8M6.75 6.5v4.5M9.25 6.5v4.5" />
+          </svg>
+          <span>Clear graphs</span>
         </button>
         <button type="button" onClick={handleUndo} disabled={!canUndo} aria-label="Undo last change">
           Undo

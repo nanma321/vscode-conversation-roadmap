@@ -28,6 +28,7 @@ describe("summarizeIncrementally", () => {
     const node = result.roadmap.nodes[0];
     assert.strictEqual(node.title, "Release planning");
     assert.strictEqual(node.nodeType, "topic");
+    assert.strictEqual(node.isNew, true);
     assert.ok(node.sourceRefs.length >= 1, "every generated node must cite at least one source turn");
     assert.strictEqual(node.sourceRefs[0].turnId, turn.id);
     assert.strictEqual(result.roadmap.edges.length, 0);
@@ -42,6 +43,7 @@ describe("summarizeIncrementally", () => {
       summary: "Initial summary.",
       status: "open",
       nodeType: "topic",
+      isNew: true,
       tags: ["existing-tag"],
       notes: "",
       sourceRefs: [{ turnId: "turn-0", sessionId: "session-fixture" }],
@@ -78,6 +80,56 @@ describe("summarizeIncrementally", () => {
     assert.strictEqual(node.sourceRefs.length, 2);
     assert.ok(node.sourceRefs.some((r) => r.turnId === "turn-0"));
     assert.ok(node.sourceRefs.some((r) => r.turnId === turn.id));
+    assert.strictEqual(node.isNew, true, "a continuation must not clear the latest creation marker");
+  });
+
+  it("moves the New marker from the prior node to every node in a newer creation batch", () => {
+    const roadmap = makeEmptyRoadmap();
+    const now = new Date().toISOString();
+    roadmap.nodes.push({
+      id: "node-existing",
+      title: "Older newest node",
+      summary: "Old summary.",
+      status: "open",
+      nodeType: "topic",
+      isNew: true,
+      tags: [],
+      notes: "",
+      sourceRefs: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const turn = makeTurn({ id: "turn-new" });
+    const response: ModelSummaryResponse = {
+      schemaVersion: 1,
+      nodes: [
+        {
+          localId: "new-topic",
+          kind: "topic",
+          title: "New topic",
+          summary: "New topic summary.",
+          sourceTurnIds: [turn.id],
+          relation: "topic",
+          targetNodeId: "node-existing",
+        },
+        {
+          localId: "new-task",
+          kind: "task",
+          title: "New task",
+          summary: "New task summary.",
+          sourceTurnIds: [turn.id],
+          relation: "topic",
+          targetNodeId: "new-topic",
+        },
+      ],
+    };
+
+    const result = summarizeIncrementally(roadmap, response, [turn]);
+    assert.strictEqual(result.roadmap.nodes.find((node) => node.id === "node-existing")?.isNew, undefined);
+    assert.deepStrictEqual(
+      result.roadmap.nodes.filter((node) => node.isNew).map((node) => node.title),
+      ["New topic", "New task"]
+    );
   });
 
   it("preserves the existing node's non-open status on continue when the response omits status", () => {

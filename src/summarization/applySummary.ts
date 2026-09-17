@@ -124,8 +124,16 @@ export function summarizeIncrementally(
     );
   }
 
+  const createsNewNodes = response.nodes.some((node) => node.relation !== "continue");
   // Work on a deep copy so a failure partway through never mutates the caller's roadmap.
-  const nodesById = new Map<string, RoadmapNode>(roadmap.nodes.map((n) => [n.id, { ...n }]));
+  // A successful creation batch replaces the prior "New" marker; a batch of
+  // continuations leaves it untouched because no newer node was created.
+  const nodesById = new Map<string, RoadmapNode>(
+    roadmap.nodes.map((node) => [
+      node.id,
+      createsNewNodes && node.isNew ? { ...node, isNew: undefined } : { ...node },
+    ])
+  );
   const newEdges: RoadmapEdge[] = [];
   const now = new Date().toISOString();
 
@@ -176,6 +184,7 @@ export function summarizeIncrementally(
       summary: extracted.summary,
       status: defaultStatus(extracted),
       nodeType: extracted.kind,
+      isNew: true,
       tags: extracted.tags ? [...extracted.tags] : [],
       notes: "",
       sourceRefs,

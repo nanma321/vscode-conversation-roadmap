@@ -67,6 +67,7 @@ export function OutlineView(props: {
             onKeyDown={(e) => handleKeyDown(e, index)}
           >
             <span className={"badge status-" + entry.node.status}>{entry.node.status}</span>{" "}
+            {entry.node.isNew ? <span className="badge new-outline-badge">New</span> : null}{" "}
             {entry.node.title || "(untitled)"}
           </button>
         </li>

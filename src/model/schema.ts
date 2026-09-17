@@ -124,6 +124,10 @@ function validateNode(value: unknown, path: string, errors: string[]): value is 
     pushError(errors, `${path}.statusEdited`, "must be a boolean when present");
     ok = false;
   }
+  if (value.isNew !== undefined && typeof value.isNew !== "boolean") {
+    pushError(errors, `${path}.isNew`, "must be a boolean when present");
+    ok = false;
+  }
   if (value.nodeType !== undefined && !NODE_TYPES.includes(value.nodeType as NodeType)) {
     pushError(errors, `${path}.nodeType`, `must be one of ${NODE_TYPES.join(", ")} when present`);
     ok = false;

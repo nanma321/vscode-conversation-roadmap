@@ -53,6 +53,17 @@ function sampleRoadmapWithTwoNodes(overrides: Partial<Roadmap> = {}): Roadmap {
     ],
     ...overrides,
   });
+
+  it("preserves the New marker when its node is merged into another node", () => {
+    const roadmap = sampleRoadmapWithTwoNodes();
+    roadmap.nodes[1].isNew = true;
+    const result = applyWebviewMessage(roadmap, {
+      type: "mergeNodes",
+      sourceNodeId: "node-2",
+      targetNodeId: "node-1",
+    });
+    assert.strictEqual(result.roadmap.nodes[0].isNew, true);
+  });
 }
 
 describe("validateWebviewMessage", () => {
@@ -589,6 +600,7 @@ describe("applyWebviewMessage: split operation", () => {
 
     const newNode = result.roadmap.nodes.find((n) => n.title === "Split off topic")!;
     assert.ok(newNode);
+    assert.strictEqual(newNode.isNew, true);
     assert.deepStrictEqual(newNode.sourceRefs.map((r) => r.turnId), ["turn-3"]);
   });
 

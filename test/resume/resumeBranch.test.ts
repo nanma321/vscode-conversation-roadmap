@@ -69,6 +69,7 @@ describe("applyWebviewMessage: resumeFromNode (branch creation)", () => {
     const newNode = result.roadmap.nodes.find((n) => !["node-1", "node-2"].includes(n.id));
     assert.ok(newNode, "expected a newly created branch node");
     assert.strictEqual(newNode?.title, "Resume: Follow-up");
+    assert.strictEqual(newNode?.isNew, true);
     assert.strictEqual(newNode?.notes, "explore an alternative");
     assert.deepStrictEqual(newNode?.sourceRefs, [], "a fresh branch has no captured turns yet");
 
@@ -77,6 +78,17 @@ describe("applyWebviewMessage: resumeFromNode (branch creation)", () => {
     assert.strictEqual(branchEdge?.source, "node-2");
     assert.strictEqual(branchEdge?.target, newNode?.id);
     assert.strictEqual(branchEdge?.label, "resume");
+  });
+
+  it("moves the New marker from an older node to the new resume branch", () => {
+    const roadmap = sampleRoadmap();
+    roadmap.nodes[0].isNew = true;
+    const result = applyWebviewMessage(roadmap, { type: "resumeFromNode", nodeId: "node-2" });
+
+    assert.strictEqual(result.roadmap.nodes.find((node) => node.id === "node-1")?.isNew, undefined);
+    const markedNodes = result.roadmap.nodes.filter((node) => node.isNew);
+    assert.strictEqual(markedNodes.length, 1);
+    assert.match(markedNodes[0].title, /^Resume:/);
   });
 
   it("leaves the source node and existing path completely unchanged", () => {

@@ -1,5 +1,7 @@
 export const DEFAULT_NODE_BACKGROUND_FALLBACK = "#f3f3f3";
 export const DEFAULT_NODE_FOREGROUND_FALLBACK = "#1f1f1f";
+export const NEW_NODE_RIBBON_BACKGROUND = "#005fb8";
+export const NEW_NODE_RIBBON_FOREGROUND = "#ffffff";
 
 export const NODE_COLOR_SWATCHES = [
   "#f14c4c",
