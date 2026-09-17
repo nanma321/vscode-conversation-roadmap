@@ -61,6 +61,8 @@ export type WebviewToHostMessage =
   | { type: "undo" }
   /** Re-applies the most recently undone transaction. */
   | { type: "redo" }
+  /** Requests host-confirmed deletion of all roadmap graphs while retaining captured transcripts. */
+  | { type: "clearAllRoadmaps" }
   | { type: "selectNode"; nodeId: string | null }
   | { type: "requestState" };
 
@@ -119,6 +121,9 @@ export function validateWebviewMessage(value: unknown): MessageValidationResult 
   switch (type) {
     case "requestState":
       return { valid: true, errors: [], value: { type: "requestState" } };
+
+    case "clearAllRoadmaps":
+      return { valid: true, errors: [], value: { type: "clearAllRoadmaps" } };
 
     case "selectNode": {
       if (value.nodeId !== null && !isNonEmptyString(value.nodeId)) {
@@ -445,8 +450,14 @@ export function applyWebviewMessage(
   }
   const message = validation.value;
 
-  if (message.type === "selectNode" || message.type === "requestState") {
-    // Transient view state only; nothing to persist.
+  if (
+    message.type === "selectNode" ||
+    message.type === "requestState" ||
+    message.type === "clearAllRoadmaps"
+  ) {
+    // Transient or host-owned actions; nothing for this pure roadmap applier
+    // to persist. The extension host handles clearAllRoadmaps after showing
+    // its trusted modal confirmation.
     return { roadmap, errors: [], changed: false };
   }
 

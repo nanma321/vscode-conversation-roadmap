@@ -107,6 +107,23 @@ export class SummarizationService {
     return this.queue;
   }
 
+  /**
+   * Serializes graph clearing behind any active summarization, preserving raw
+   * transcripts while ensuring all turns present at clear time stay excluded
+   * after reload and cannot repopulate the graph.
+   */
+  clearAllRoadmaps(): Promise<Roadmap> {
+    const clear = async (): Promise<SummarizeOutcome> => {
+      await this.turnStore.excludeAllFromRoadmap();
+      await this.roadmapStore.deleteAll();
+      this.attemptedTurnIds.clear();
+      const roadmap = await loadDefaultRoadmap(this.roadmapStore);
+      return { changed: true, roadmap, errors: [] };
+    };
+    this.queue = this.queue.then(clear, clear);
+    return this.queue.then((outcome) => outcome.roadmap);
+  }
+
   private async runOnce(): Promise<SummarizeOutcome> {
     const roadmap = await loadDefaultRoadmap(this.roadmapStore);
 
@@ -128,7 +145,11 @@ export class SummarizationService {
 
     const allTurns = this.turnStore.getAll();
     const pending = allTurns.filter(
-      (t) => t.completed && !referenced.has(t.id) && !this.attemptedTurnIds.has(t.id)
+      (t) =>
+        t.completed &&
+        !t.roadmapExcluded &&
+        !referenced.has(t.id) &&
+        !this.attemptedTurnIds.has(t.id)
     );
     if (pending.length === 0) {
       return { changed: false, roadmap, errors: [] };

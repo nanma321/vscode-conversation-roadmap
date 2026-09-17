@@ -30,7 +30,7 @@ export function SearchBar(props: {
   );
 
   return (
-    <div className="search-bar" role="search" aria-label="Search and filter the roadmap">
+    <div id="roadmap-search-filters" className="search-bar" role="search" aria-label="Search and filter the roadmap">
       <div className="search-primary-row">
         <input
           type="search"

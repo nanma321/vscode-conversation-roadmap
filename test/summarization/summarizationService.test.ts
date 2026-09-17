@@ -87,6 +87,73 @@ describe("SummarizationService", () => {
     assert.strictEqual(second.changed, false);
   });
 
+  it("clears all graphs permanently while preserving transcripts and allowing future turns", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurn(turnStore, "turn-1", "old question");
+
+    const initialService = new SummarizationService(
+      turnStore,
+      roadmapStore,
+      async () => topicResponse("turn-1", "Old node")
+    );
+    await initialService.summarizeNewTurns();
+    const cleared = await initialService.clearAllRoadmaps();
+
+    assert.strictEqual(cleared.nodes.length, 0);
+    assert.strictEqual(turnStore.getAll().length, 1);
+    assert.strictEqual(turnStore.getAll()[0].request, "old question");
+    assert.strictEqual(turnStore.getAll()[0].roadmapExcluded, true);
+
+    const reloadedTurns = new TurnStore(dir);
+    const reloadedRoadmaps = new RoadmapStore(dir);
+    await reloadedTurns.load();
+    await reloadedRoadmaps.load();
+    let calls = 0;
+    const reloadedService = new SummarizationService(reloadedTurns, reloadedRoadmaps, async (prompt) => {
+      calls += 1;
+      const turnId = /Turn id: (\S+)/.exec(prompt)?.[1] ?? "unknown";
+      return topicResponse(turnId, "New node");
+    });
+
+    await reloadedService.summarizeNewTurns();
+    assert.strictEqual(calls, 0, "cleared transcripts must not recreate graph nodes after reload");
+
+    await seedTurn(reloadedTurns, "turn-2", "new question");
+    const outcome = await reloadedService.summarizeNewTurns();
+    assert.strictEqual(calls, 1);
+    assert.strictEqual(outcome.roadmap.nodes.length, 1);
+    assert.ok(outcome.roadmap.nodes[0].sourceRefs.some((ref) => ref.turnId === "turn-2"));
+  });
+
+  it("serializes clearing after an in-flight summary so late model output cannot restore nodes", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurn(turnStore, "turn-1", "question being summarized");
+
+    let releaseModel: ((response: string) => void) | undefined;
+    const modelResponse = new Promise<string>((resolve) => {
+      releaseModel = resolve;
+    });
+    const service = new SummarizationService(turnStore, roadmapStore, async () => modelResponse);
+
+    const summaryPromise = service.summarizeNewTurns();
+    const clearPromise = service.clearAllRoadmaps();
+    releaseModel?.(topicResponse("turn-1", "Late node"));
+
+    await summaryPromise;
+    const cleared = await clearPromise;
+    assert.strictEqual(cleared.nodes.length, 0);
+    assert.strictEqual((await loadDefaultRoadmap(new RoadmapStore(dir))).nodes.length, 0);
+    assert.strictEqual(turnStore.getAll()[0].roadmapExcluded, true);
+  });
+
   it("skips incomplete (cancelled/failed) turns", async () => {
     const dir = makeTempDir();
     const turnStore = new TurnStore(dir);

@@ -148,6 +148,14 @@ preserved).
   tags already present in the selected session rather than requiring exact
   comma-separated input. Branches remain visible through their orange,
   animated connections instead of a separate technical branch-only filter.
+- **Compact controls**: **Hide search & filters** collapses the search area
+  while keeping the current query and filters active; the collapsed button
+  displays the current match count.
+- **Graph-only cleanup**: **Clear all graphs** permanently removes every
+  roadmap node and connection after a trusted VS Code confirmation, while
+  retaining the captured session transcripts. Cleared transcripts are marked
+  as intentionally excluded so they do not recreate old graphs after restart;
+  future `@roadmap` turns continue generating new nodes normally.
 - **Contrast-safe nodes**: default nodes use VS Code's editor-widget
   background and foreground tokens instead of unrelated button colors.
   Custom node colors automatically select whichever of black or white has

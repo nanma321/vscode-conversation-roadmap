@@ -160,6 +160,11 @@ describe("validateWebviewMessage", () => {
     const result = validateWebviewMessage({ type: "requestState" });
     assert.strictEqual(result.valid, true);
   });
+
+  it("accepts a clearAllRoadmaps request for host confirmation", () => {
+    const result = validateWebviewMessage({ type: "clearAllRoadmaps" });
+    assert.strictEqual(result.valid, true);
+  });
 });
 
 describe("applyWebviewMessage", () => {
@@ -169,6 +174,14 @@ describe("applyWebviewMessage", () => {
     assert.strictEqual(result.changed, false);
     assert.strictEqual(result.roadmap, roadmap);
     assert.ok(result.errors.length > 0);
+  });
+
+  it("leaves clearAllRoadmaps to the extension host without mutating the current roadmap", () => {
+    const roadmap = sampleRoadmap();
+    const result = applyWebviewMessage(roadmap, { type: "clearAllRoadmaps" });
+    assert.strictEqual(result.changed, false);
+    assert.strictEqual(result.roadmap, roadmap);
+    assert.deepStrictEqual(result.errors, []);
   });
 
   it("returns the original roadmap unchanged for an unknown node id", () => {

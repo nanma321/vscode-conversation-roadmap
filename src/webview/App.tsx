@@ -52,6 +52,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   // on the host side.
   const [searchQuery, setSearchQuery] = React.useState<string>("");
   const [searchFilters, setSearchFilters] = React.useState<SearchFilters>({});
+  const [searchExpanded, setSearchExpanded] = React.useState<boolean>(true);
   // Optional session filter (view-only): null shows the full cumulative graph;
   // a session id narrows the graph/outline to that chat while leaving the
   // persisted roadmap untouched.
@@ -215,7 +216,30 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
             </select>
           </label>
         ) : null}
+        {viewMode !== "transcript" ? (
+          <button
+            type="button"
+            aria-expanded={searchExpanded}
+            aria-controls="roadmap-search-filters"
+            onClick={() => setSearchExpanded((expanded) => !expanded)}
+          >
+            {searchExpanded
+              ? "Hide search & filters"
+              : `Show search & filters (${matchedNodeIds.size} ${
+                  matchedNodeIds.size === 1 ? "match" : "matches"
+                })`}
+          </button>
+        ) : null}
         <span className="toolbar-spacer" />
+        <button
+          type="button"
+          className="danger-toolbar-button"
+          title="Delete every graph while keeping captured transcripts"
+          disabled={roadmap.nodes.length === 0}
+          onClick={() => post({ type: "clearAllRoadmaps" })}
+        >
+          Clear all graphs
+        </button>
         <button type="button" onClick={handleUndo} disabled={!canUndo} aria-label="Undo last change">
           Undo
         </button>
@@ -233,7 +257,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
         </div>
       ) : null}
 
-      {viewMode === "transcript" ? null : (
+      {viewMode === "transcript" || !searchExpanded ? null : (
         <SearchBar
           query={searchQuery}
           onQueryChange={setSearchQuery}
@@ -241,7 +265,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
           onFiltersChange={setSearchFilters}
           availableTags={availableTags}
           matchCount={matchedNodeIds.size}
-          totalCount={roadmap.nodes.length}
+          totalCount={visibleRoadmap.nodes.length}
         />
       )}
 

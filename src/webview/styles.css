@@ -53,6 +53,11 @@ textarea:focus-visible,
   color: var(--vscode-button-foreground, #fff);
 }
 
+.toolbar button.danger-toolbar-button {
+  color: var(--vscode-errorForeground, #f48771);
+  border-color: currentColor;
+}
+
 .toolbar button:disabled {
   opacity: 0.5;
   cursor: not-allowed;

@@ -33,6 +33,7 @@ export const GRAPH_VIEW_TYPE = "conversationRoadmap.graph";
 let currentPanel: vscode.WebviewPanel | undefined;
 let currentRoadmapStore: RoadmapStore | undefined;
 let currentTurnStore: TurnStore | undefined;
+let currentClearAllRoadmaps: (() => Promise<Roadmap>) | undefined;
 /** Last node the Webview reported as selected, so the palette "Resume from Selected Node" command knows its target. */
 let currentSelectedNodeId: string | null = null;
 /** Undo/redo transaction history (Phase 6) for the single open roadmap; recreated each time the panel is (re)opened. */
@@ -48,6 +49,7 @@ export function disposeGraphWebview(): void {
   currentPanel = undefined;
   currentRoadmapStore = undefined;
   currentTurnStore = undefined;
+  currentClearAllRoadmaps = undefined;
   currentSelectedNodeId = null;
 }
 
@@ -242,14 +244,45 @@ export async function resumeSelectedNode(): Promise<void> {
   await performResume(currentSelectedNodeId, undefined);
 }
 
+async function confirmAndClearAllRoadmaps(): Promise<void> {
+  if (!currentClearAllRoadmaps) {
+    postError(["clear all graphs is unavailable because the graph service is not initialized"]);
+    return;
+  }
+  const confirmLabel = "Clear All Graphs";
+  const choice = await vscode.window.showWarningMessage(
+    "This permanently deletes every roadmap node and connection. Captured conversation transcripts will be kept, but existing transcripts will not automatically recreate the cleared graphs. This cannot be undone. Continue?",
+    { modal: true },
+    confirmLabel
+  );
+  if (choice !== confirmLabel) {
+    return;
+  }
+
+  try {
+    const roadmap = await currentClearAllRoadmaps();
+    currentHistory = new RoadmapHistory();
+    currentSelectedNodeId = null;
+    broadcastState(roadmap, currentTurnStore?.getAll() ?? []);
+    void vscode.window.showInformationMessage(
+      "All roadmap graphs were cleared. Captured conversation transcripts were kept."
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    postError([`clear all graphs failed: ${message}`]);
+  }
+}
+
 /** Opens (or reveals) the graph Webview panel, populated with the current roadmap and turns. */
 export async function showGraphWebview(
   context: vscode.ExtensionContext,
   turnStore: TurnStore,
-  roadmapStore: RoadmapStore
+  roadmapStore: RoadmapStore,
+  clearAllRoadmaps: () => Promise<Roadmap>
 ): Promise<vscode.WebviewPanel> {
   currentRoadmapStore = roadmapStore;
   currentTurnStore = turnStore;
+  currentClearAllRoadmaps = clearAllRoadmaps;
 
   const roadmap = await loadDefaultRoadmap(roadmapStore);
   const turns = turnStore.getAll();
@@ -299,6 +332,9 @@ export async function showGraphWebview(
         } else if (peek.value.type === "resumeFromNode") {
           await performResume(peek.value.nodeId, peek.value.question);
           return;
+        } else if (peek.value.type === "clearAllRoadmaps") {
+          await confirmAndClearAllRoadmaps();
+          return;
         }
       }
 
@@ -323,6 +359,7 @@ export async function showGraphWebview(
     currentPanel = undefined;
     currentRoadmapStore = undefined;
     currentTurnStore = undefined;
+    currentClearAllRoadmaps = undefined;
     currentSelectedNodeId = null;
   }, null, context.subscriptions);
 

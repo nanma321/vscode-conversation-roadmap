@@ -239,6 +239,25 @@ describe("TurnStore", () => {
     assert.strictEqual(reloaded.length, 0);
   });
 
+  it("can exclude existing turns from roadmap generation without deleting transcript content", async () => {
+    const dir = makeTempDir();
+    const store = new TurnStore(dir);
+    await store.load();
+    await store.append(sampleTurn({ id: "turn-1", request: "keep this request", response: "keep this response" }));
+
+    const changed = await store.excludeAllFromRoadmap();
+
+    assert.strictEqual(changed, 1);
+    assert.strictEqual(store.getAll()[0].roadmapExcluded, true);
+    assert.strictEqual(store.getAll()[0].request, "keep this request");
+    assert.strictEqual(store.getAll()[0].response, "keep this response");
+
+    const reloaded = new TurnStore(dir);
+    await reloaded.load();
+    assert.strictEqual(reloaded.getAll()[0].roadmapExcluded, true);
+    assert.strictEqual(reloaded.getAll()[0].request, "keep this request");
+  });
+
   it("deleteAll is safe to call when no file has ever been written", async () => {
     const dir = makeTempDir();
     const store = new TurnStore(dir);

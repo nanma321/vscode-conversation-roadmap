@@ -50,6 +50,11 @@ export interface TurnRecord {
   /** Whether the response completed successfully (false for cancelled/errored turns). */
   completed: boolean;
   /**
+   * True when the user cleared all roadmap graphs while retaining transcripts.
+   * Excluded turns stay readable but are never automatically summarized again.
+   */
+  roadmapExcluded?: boolean;
+  /**
    * Supported references attached to the request (e.g. files or selections).
    * Turns persisted before references were captured are normalized to `[]` on load.
    */
@@ -145,6 +150,29 @@ export class TurnStore {
     this.turns.push({ ...turn });
     await this.persist();
     this.emitChange();
+  }
+
+  /**
+   * Keeps every captured transcript but marks all current turns as ineligible
+   * for future automatic graph generation. This metadata-only update does not
+   * emit a transcript change because visible turn content is unchanged.
+   */
+  async excludeAllFromRoadmap(): Promise<number> {
+    if (!this.loaded) {
+      await this.load();
+    }
+    let changed = 0;
+    this.turns = this.turns.map((turn) => {
+      if (turn.roadmapExcluded) {
+        return turn;
+      }
+      changed += 1;
+      return { ...turn, roadmapExcluded: true };
+    });
+    if (changed > 0) {
+      await this.persist();
+    }
+    return changed;
   }
 
   private async persist(): Promise<void> {
