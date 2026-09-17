@@ -102,12 +102,6 @@ describe("search", () => {
       assert.deepStrictEqual(results.map((n) => n.id), ["node-2"]);
     });
 
-    it("filters to nodes targeted by a branch edge", () => {
-      const roadmap = sampleRoadmap();
-      const results = filterNodes(roadmap, { branchesOnly: true });
-      assert.deepStrictEqual(results.map((n) => n.id), ["node-3"]);
-    });
-
     it("combines multiple filters with AND", () => {
       const roadmap = sampleRoadmap();
       const results = filterNodes(roadmap, { statuses: ["open"], tags: ["planning"] });

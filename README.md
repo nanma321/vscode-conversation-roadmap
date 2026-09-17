@@ -146,8 +146,15 @@ preserved).
   important** adds filterable emphasis; and **Color (visual group)** groups
   related nodes visually. Tag filtering uses selectable chips derived from
   tags already present in the selected session rather than requiring exact
-  comma-separated input. The branch filter is labeled **Branch nodes only**
-  because it includes every node reached through a branch edge.
+  comma-separated input. Branches remain visible through their orange,
+  animated connections instead of a separate technical branch-only filter.
+- **Contrast-safe nodes**: default nodes use VS Code's editor-widget
+  background and foreground tokens instead of unrelated button colors.
+  Custom node colors automatically select whichever of black or white has
+  the stronger contrast. Automated MAS 1.4.3 checks enforce at least 4.5:1
+  across the built-in swatches and a representative 4,096-color RGB grid;
+  highlighted nodes also display an **Important** badge instead of relying
+  on color alone.
 - **Safe merge preview**: merging first shows both nodes, lets the user choose
   which title survives, and explains what will be retained. Both summaries,
   notes, tags, source-turn provenance, and redirected connections are kept;

@@ -4,7 +4,7 @@
  * Search must locate both AI/user-authored node text (title, summary,
  * notes, tags) *and* the raw source transcript a node was derived from, so
  * a user can find a topic either by how it was summarized or by exactly
- * what was said. Filters (type, status, tags, highlighted, branches) are
+ * what was said. Filters (type, status, tags, and highlighted state) are
  * independent of the free-text query and can be combined with it or used
  * on their own to narrow the visible graph.
  *
@@ -42,8 +42,6 @@ export interface SearchFilters {
   tags?: string[];
   /** When true, only nodes with `highlighted: true` pass. */
   highlightedOnly?: boolean;
-  /** When true, only nodes reached via a "branch" edge pass. */
-  branchesOnly?: boolean;
 }
 
 /** Unique non-empty tags currently used in a roadmap, sorted for stable filter controls. */
@@ -75,23 +73,12 @@ function matchesTagsFilter(node: RoadmapNode, tags: readonly string[] | undefine
   return tags.some((tag) => node.tags.includes(tag));
 }
 
-/** Ids of nodes that are the *target* of at least one "branch" edge. */
-function collectBranchNodeIds(roadmap: Roadmap): Set<string> {
-  const ids = new Set<string>();
-  for (const edge of roadmap.edges) {
-    if (edge.kind === "branch") {
-      ids.add(edge.target);
-    }
-  }
-  return ids;
-}
-
 /**
  * Returns true if `node` satisfies every constraint in `filters`. Filters
  * combine with AND (a node must satisfy all of them); the `tags` filter
  * itself combines with OR (any one listed tag is enough).
  */
-export function matchesFilters(node: RoadmapNode, filters: SearchFilters, branchNodeIds?: ReadonlySet<string>): boolean {
+export function matchesFilters(node: RoadmapNode, filters: SearchFilters): boolean {
   if (!matchesTypeFilter(node, filters.types)) {
     return false;
   }
@@ -104,16 +91,12 @@ export function matchesFilters(node: RoadmapNode, filters: SearchFilters, branch
   if (filters.highlightedOnly && !node.highlighted) {
     return false;
   }
-  if (filters.branchesOnly && !(branchNodeIds?.has(node.id) ?? false)) {
-    return false;
-  }
   return true;
 }
 
 /** Returns the roadmap's nodes that satisfy `filters`, with no free-text query applied. */
 export function filterNodes(roadmap: Roadmap, filters: SearchFilters): RoadmapNode[] {
-  const branchNodeIds = filters.branchesOnly ? collectBranchNodeIds(roadmap) : undefined;
-  return roadmap.nodes.filter((node) => matchesFilters(node, filters, branchNodeIds));
+  return roadmap.nodes.filter((node) => matchesFilters(node, filters));
 }
 
 function normalize(text: string): string {
@@ -144,12 +127,11 @@ export function searchRoadmap(
   filters: SearchFilters = {}
 ): SearchMatch[] {
   const trimmedQuery = normalize(query.trim());
-  const branchNodeIds = filters.branchesOnly ? collectBranchNodeIds(roadmap) : undefined;
   const turnsById = new Map(turns.map((t) => [t.id, t]));
 
   const results: SearchMatch[] = [];
   for (const node of roadmap.nodes) {
-    if (!matchesFilters(node, filters, branchNodeIds)) {
+    if (!matchesFilters(node, filters)) {
       continue;
     }
 

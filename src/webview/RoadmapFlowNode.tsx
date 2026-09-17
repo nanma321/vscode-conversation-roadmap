@@ -7,6 +7,11 @@
 import * as React from "react";
 import { Handle, Position } from "reactflow";
 import { RoadmapNode } from "../model/types";
+import {
+  DEFAULT_NODE_BACKGROUND_FALLBACK,
+  DEFAULT_NODE_FOREGROUND_FALLBACK,
+  contrastingTextColor,
+} from "./nodeColor";
 
 export interface RoadmapFlowNodeData {
   node: RoadmapNode;
@@ -17,7 +22,16 @@ export interface RoadmapFlowNodeData {
 
 export function RoadmapFlowNode(props: { data: RoadmapFlowNodeData }): React.JSX.Element {
   const { node, selected, dimmed } = props.data;
-  const background = node.color ?? "var(--vscode-button-secondaryBackground, #333)";
+  const style: React.CSSProperties = node.color
+    ? {
+        background: node.color,
+        color: contrastingTextColor(node.color),
+        borderColor: contrastingTextColor(node.color),
+      }
+    : {
+        background: `var(--vscode-editorWidget-background, ${DEFAULT_NODE_BACKGROUND_FALLBACK})`,
+        color: `var(--vscode-editorWidget-foreground, var(--vscode-foreground, ${DEFAULT_NODE_FOREGROUND_FALLBACK}))`,
+      };
   return (
     <div
       className={
@@ -26,7 +40,7 @@ export function RoadmapFlowNode(props: { data: RoadmapFlowNodeData }): React.JSX
         (node.highlighted ? " highlighted" : "") +
         (dimmed ? " dimmed" : "")
       }
-      style={{ background }}
+      style={style}
       title={node.summary}
     >
       <Handle type="target" position={Position.Top} />
@@ -34,6 +48,7 @@ export function RoadmapFlowNode(props: { data: RoadmapFlowNodeData }): React.JSX
       <div className="roadmap-flow-node-meta">
         <span className={"badge status-" + node.status}>Status: {node.status}</span>
         <span className="badge type">Type: {node.nodeType ?? "topic"}</span>
+        {node.highlighted ? <span className="badge highlight-badge">Important</span> : null}
       </div>
       {node.tags.length > 0 ? (
         <div className="roadmap-flow-node-tags">

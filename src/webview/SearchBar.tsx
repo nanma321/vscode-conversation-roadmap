@@ -1,7 +1,7 @@
 /**
  * Search box + filters toolbar (Phase 8): a free-text query (matched
  * against node title/summary/notes/tags and, via `search.ts`, each node's
- * source transcript) plus independent status/type/tag/highlight/branch
+ * source transcript) plus independent status/type/tag/highlight
  * filters. Purely a controlled input - `App.tsx` owns the actual query and
  * filter state and derives which nodes match using `model/search.ts`, the
  * same logic unit-tested on the host side, so the Webview and extension
@@ -110,14 +110,6 @@ export function SearchBar(props: {
             Highlighted only
           </label>
 
-          <label className="filter-checkbox">
-            <input
-              type="checkbox"
-              checked={Boolean(filters.branchesOnly)}
-              onChange={(e) => onFiltersChange({ ...filters, branchesOnly: e.target.checked || undefined })}
-            />
-            Branch nodes only
-          </label>
         </fieldset>
       </div>
     </div>

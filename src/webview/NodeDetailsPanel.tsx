@@ -13,8 +13,7 @@ import * as React from "react";
 import { NODE_STATUSES, NODE_TYPES, NodeStatus, NodeType, Roadmap, RoadmapNode } from "../model/types";
 import type { TurnRecord } from "../turnStore";
 import { Markdown } from "./Markdown";
-
-const COLOR_SWATCHES = ["#f14c4c", "#e2a336", "#e5c116", "#4caf50", "#2472c8", "#a074c4", "#8b8b8b"];
+import { NODE_COLOR_SWATCHES } from "./nodeColor";
 
 export function NodeDetailsPanel(props: {
   node: RoadmapNode | null;
@@ -173,7 +172,7 @@ export function NodeDetailsPanel(props: {
       <div className="field">
         <span id="node-color-label">Color (visual group)</span>
         <div role="group" aria-labelledby="node-color-label" className="color-swatches">
-          {COLOR_SWATCHES.map((color) => (
+          {NODE_COLOR_SWATCHES.map((color) => (
             <button
               key={color}
               type="button"
