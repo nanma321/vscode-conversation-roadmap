@@ -21,6 +21,8 @@ body {
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
   border-bottom: 1px solid var(--vscode-panel-border, #888);
@@ -411,36 +413,71 @@ body {
 }
 /* Search / filter toolbar (Phase 8) */
 .search-bar {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.65rem;
+  border-bottom: 1px solid var(--vscode-panel-border, #888);
+}
+
+.search-primary-row,
+.search-filter-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.5rem;
-  border-bottom: 1px solid var(--vscode-panel-border, #888);
+  min-width: 0;
+}
+
+.search-filter-row {
+  align-items: stretch;
+  flex-wrap: wrap;
 }
 
 .search-input,
 .tags-filter-input {
+  box-sizing: border-box;
   background: var(--vscode-input-background, #3c3c3c);
   color: var(--vscode-input-foreground, inherit);
   border: 1px solid var(--vscode-input-border, transparent);
-  padding: 0.3rem;
+  border-radius: 3px;
+  padding: 0.35rem 0.45rem;
   font-family: inherit;
+  min-width: 0;
 }
 
 .search-input {
   flex: 1;
-  min-width: 12rem;
 }
 
 .search-filters {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
+  min-width: 0;
   border: 1px solid var(--vscode-panel-border, #888);
   border-radius: 4px;
-  padding: 0.15rem 0.5rem;
+  padding: 0.25rem 0.55rem 0.4rem;
   margin: 0;
+}
+
+.type-filters {
+  flex: 1 1 29rem;
+}
+
+.status-filters {
+  flex: 1 1 21rem;
+}
+
+.tag-filters {
+  flex: 1 1 15rem;
+}
+
+.tag-filters .tags-filter-input {
+  width: 100%;
+}
+
+.display-filters {
+  flex: 1 1 17rem;
 }
 
 .search-filters legend {
@@ -461,6 +498,7 @@ body {
   font-size: 0.8em;
   opacity: 0.75;
   white-space: nowrap;
+  text-align: right;
 }
 
 /* Nodes/entries that don't match the current search query/filters (Phase 8)
@@ -524,18 +562,42 @@ body {
 /* Session filter dropdown in the graph toolbar */
 .session-filter {
   display: inline-flex;
+  flex: 1 1 18rem;
   align-items: center;
   gap: 0.35rem;
-  margin-left: 0.5rem;
   font-size: 0.85em;
+  min-width: 12rem;
 }
 .session-filter-label {
   opacity: 0.8;
 }
 .session-filter select {
+  flex: 1;
+  min-width: 0;
+  max-width: 36rem;
   background: var(--vscode-dropdown-background, #3c3c3c);
   color: var(--vscode-dropdown-foreground, inherit);
   border: 1px solid var(--vscode-dropdown-border, #454545);
   border-radius: 3px;
   padding: 0.15rem 0.3rem;
+}
+
+@media (max-width: 640px) {
+  .search-primary-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search-count {
+    text-align: left;
+  }
+
+  .session-filter {
+    flex-basis: 100%;
+    order: 2;
+  }
+
+  .toolbar-spacer {
+    display: none;
+  }
 }

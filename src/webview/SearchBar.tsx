@@ -31,79 +31,88 @@ export function SearchBar(props: {
 
   return (
     <div className="search-bar" role="search" aria-label="Search and filter the roadmap">
-      <input
-        type="search"
-        className="search-input"
-        placeholder="Search titles, summaries, notes, tags, and transcript..."
-        value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-        aria-label="Search roadmap and transcript"
-      />
+      <div className="search-primary-row">
+        <input
+          type="search"
+          className="search-input"
+          placeholder="Search titles, summaries, notes, tags, and transcript..."
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          aria-label="Search roadmap and transcript"
+        />
+        <span className="search-count" aria-live="polite">
+          {matchCount} / {totalCount} nodes match
+        </span>
+      </div>
 
-      <fieldset className="search-filters">
-        <legend>Type</legend>
-        {ALL_TYPES.map((type) => (
-          <label key={type} className="filter-checkbox">
+      <div className="search-filter-row">
+        <fieldset className="search-filters type-filters">
+          <legend>Type</legend>
+          {ALL_TYPES.map((type) => (
+            <label key={type} className="filter-checkbox">
+              <input
+                type="checkbox"
+                checked={(filters.types ?? []).includes(type)}
+                onChange={() => onFiltersChange({ ...filters, types: toggle(filters.types ?? [], type) })}
+              />
+              {type}
+            </label>
+          ))}
+        </fieldset>
+
+        <fieldset className="search-filters status-filters">
+          <legend>Status</legend>
+          {ALL_STATUSES.map((status) => (
+            <label key={status} className="filter-checkbox">
+              <input
+                type="checkbox"
+                checked={(filters.statuses ?? []).includes(status)}
+                onChange={() => onFiltersChange({ ...filters, statuses: toggle(filters.statuses ?? [], status) })}
+              />
+              {status}
+            </label>
+          ))}
+        </fieldset>
+
+        <fieldset className="search-filters tag-filters">
+          <legend>Tags</legend>
+          <input
+            type="text"
+            className="tags-filter-input"
+            placeholder="Comma-separated tags"
+            value={tagsText}
+            onChange={(e) => {
+              const tags = e.target.value
+                .split(",")
+                .map((t) => t.trim())
+                .filter((t) => t.length > 0);
+              onFiltersChange({ ...filters, tags: tags.length > 0 ? tags : undefined });
+            }}
+            aria-label="Filter by tags, comma-separated"
+          />
+        </fieldset>
+
+        <fieldset className="search-filters display-filters">
+          <legend>Show</legend>
+          <label className="filter-checkbox">
             <input
               type="checkbox"
-              checked={(filters.types ?? []).includes(type)}
-              onChange={() => onFiltersChange({ ...filters, types: toggle(filters.types ?? [], type) })}
+              checked={Boolean(filters.highlightedOnly)}
+              onChange={(e) => onFiltersChange({ ...filters, highlightedOnly: e.target.checked || undefined })}
             />
-            {type}
+            Highlighted only
           </label>
-        ))}
-      </fieldset>
 
-      <fieldset className="search-filters">
-        <legend>Status</legend>
-        {ALL_STATUSES.map((status) => (
-          <label key={status} className="filter-checkbox">
+          <label className="filter-checkbox">
             <input
               type="checkbox"
-              checked={(filters.statuses ?? []).includes(status)}
-              onChange={() => onFiltersChange({ ...filters, statuses: toggle(filters.statuses ?? [], status) })}
+              checked={Boolean(filters.branchesOnly)}
+              onChange={(e) => onFiltersChange({ ...filters, branchesOnly: e.target.checked || undefined })}
             />
-            {status}
+            Resume branches only
           </label>
-        ))}
-      </fieldset>
-
-      <input
-        type="text"
-        className="tags-filter-input"
-        placeholder="Filter by tags (comma-separated)"
-        value={tagsText}
-        onChange={(e) => {
-          const tags = e.target.value
-            .split(",")
-            .map((t) => t.trim())
-            .filter((t) => t.length > 0);
-          onFiltersChange({ ...filters, tags: tags.length > 0 ? tags : undefined });
-        }}
-        aria-label="Filter by tags, comma-separated"
-      />
-
-      <label className="filter-checkbox">
-        <input
-          type="checkbox"
-          checked={Boolean(filters.highlightedOnly)}
-          onChange={(e) => onFiltersChange({ ...filters, highlightedOnly: e.target.checked || undefined })}
-        />
-        Highlighted only
-      </label>
-
-      <label className="filter-checkbox">
-        <input
-          type="checkbox"
-          checked={Boolean(filters.branchesOnly)}
-          onChange={(e) => onFiltersChange({ ...filters, branchesOnly: e.target.checked || undefined })}
-        />
-        Resume branches only
-      </label>
-
-      <span className="search-count" aria-live="polite">
-        {matchCount} / {totalCount} nodes match
-      </span>
+        </fieldset>
+      </div>
     </div>
   );
 }
