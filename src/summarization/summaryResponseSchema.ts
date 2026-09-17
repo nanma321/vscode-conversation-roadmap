@@ -11,10 +11,10 @@
  * `applySummary.ts` for how a failed validation here leaves the previous
  * graph unchanged.
  */
-import { NodeStatus } from "../model/types";
+import { NODE_STATUSES, NODE_TYPES, NodeStatus, NodeType } from "../model/types";
 
 /** The kind of thing an extracted node represents. `"topic"` is a conversational thread; the rest are items found within one. */
-export type ExtractedNodeKind = "topic" | "decision" | "question" | "task" | "outcome" | "blocker";
+export type ExtractedNodeKind = NodeType;
 
 /**
  * How an extracted node relates to the existing graph:
@@ -74,16 +74,8 @@ export interface SummaryValidationResult {
   value?: ModelSummaryResponse;
 }
 
-const EXTRACTED_NODE_KINDS: readonly ExtractedNodeKind[] = [
-  "topic",
-  "decision",
-  "question",
-  "task",
-  "outcome",
-  "blocker",
-];
+const EXTRACTED_NODE_KINDS: readonly ExtractedNodeKind[] = NODE_TYPES;
 const NODE_RELATIONS: readonly NodeRelation[] = ["continue", "topic", "branch"];
-const NODE_STATUSES: readonly NodeStatus[] = ["open", "in-progress", "done", "blocked"];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

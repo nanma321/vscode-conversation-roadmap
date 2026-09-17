@@ -25,7 +25,10 @@ no domain model, schema, or summarization yet (see later phases).
   Flow app bundled with `esbuild.js` into `media/graph.js`) renders the
   persisted roadmap graph: pan/zoom/minimap/fit-to-view, node selection with
   a transcript detail panel, dragging to reposition nodes, and editing a
-  node's title, notes, tags, color, and highlight state. An accessible
+  node's title, type, status, personal notes, tags, grouping color, and
+  highlight state. Status and type badges are explicitly labeled on each
+  graph node so they are not confused with user tags. A manually changed
+  status is protected from later automatic-summary updates. An accessible
   outline/tree view is available as a keyboard-only alternative to the
   canvas. The roadmap graph is **cumulative** (every chat's summarized
   turns accumulate into one persistent graph); a **Session** filter in the
@@ -138,6 +141,17 @@ preserved).
   then change its source, destination, optional label, or line type in the
   details panel. Saving participates in Undo/Redo; deletion is a separate
   confirmed action.
+- **Clear node organization controls**: **My notes** holds user-authored
+  context that automatic summaries never overwrite; **Highlight as
+  important** adds filterable emphasis; and **Color (visual group)** groups
+  related nodes visually. Tag filtering uses selectable chips derived from
+  tags already present in the selected session rather than requiring exact
+  comma-separated input. The branch filter is labeled **Branch nodes only**
+  because it includes every node reached through a branch edge.
+- **Safe merge preview**: merging first shows both nodes, lets the user choose
+  which title survives, and explains what will be retained. Both summaries,
+  notes, tags, source-turn provenance, and redirected connections are kept;
+  the completed merge remains undoable.
 - **No telemetry**: this extension does not send any telemetry and has no
   dependency on `vscode.env.createTelemetryLogger` or similar APIs.
   Conversation content (turns, summaries, roadmap graphs) is stored only

@@ -16,7 +16,16 @@
  * unit-tested in isolation, matching the pattern used throughout the rest
  * of the extension host.
  */
-import { Roadmap, RoadmapEdge, RoadmapNode, SourceReference } from "./model/types";
+import {
+  NODE_STATUSES,
+  NODE_TYPES,
+  NodeStatus,
+  NodeType,
+  Roadmap,
+  RoadmapEdge,
+  RoadmapNode,
+  SourceReference,
+} from "./model/types";
 import { HEX_COLOR_PATTERN } from "./model/colorPattern";
 import { RoadmapHistory } from "./model/roadmapHistory";
 import type { TurnRecord } from "./turnStore";
@@ -25,6 +34,8 @@ import type { TurnRecord } from "./turnStore";
 export type WebviewToHostMessage =
   | { type: "moveNode"; nodeId: string; position: { x: number; y: number } }
   | { type: "renameNode"; nodeId: string; title: string }
+  | { type: "updateStatus"; nodeId: string; status: NodeStatus }
+  | { type: "updateNodeType"; nodeId: string; nodeType: NodeType }
   | { type: "updateNotes"; nodeId: string; notes: string }
   | { type: "updateTags"; nodeId: string; tags: string[] }
   | { type: "updateColor"; nodeId: string; color: string | null }
@@ -36,7 +47,7 @@ export type WebviewToHostMessage =
   /** Removes a single edge. Destructive - the Webview must confirm with the user before sending this. */
   | { type: "deleteEdge"; edgeId: string }
   /** Merges `sourceNodeId` into `targetNodeId`, combining their provenance/tags/notes and removing the source node. Destructive - the Webview must confirm with the user before sending this. */
-  | { type: "mergeNodes"; sourceNodeId: string; targetNodeId: string }
+  | { type: "mergeNodes"; sourceNodeId: string; targetNodeId: string; title?: string }
   /** Splits the source turns listed in `sourceRefTurnIds` off of `nodeId` into a new node titled `title`, connected back to the original node by a manual edge. */
   | { type: "splitNode"; nodeId: string; title: string; sourceRefTurnIds: string[] }
   /**
@@ -140,6 +151,34 @@ export function validateWebviewMessage(value: unknown): MessageValidationResult 
         pushErr(errors, "message.title", "must be a non-empty string");
       }
       return finish(errors, () => ({ type: "renameNode", nodeId: value.nodeId as string, title: (value.title as string).trim() }));
+    }
+
+    case "updateStatus": {
+      if (!isNonEmptyString(value.nodeId)) {
+        pushErr(errors, "message.nodeId", "must be a non-empty string");
+      }
+      if (typeof value.status !== "string" || !NODE_STATUSES.includes(value.status as NodeStatus)) {
+        pushErr(errors, "message.status", `must be one of ${NODE_STATUSES.join(", ")}`);
+      }
+      return finish(errors, () => ({
+        type: "updateStatus",
+        nodeId: value.nodeId as string,
+        status: value.status as NodeStatus,
+      }));
+    }
+
+    case "updateNodeType": {
+      if (!isNonEmptyString(value.nodeId)) {
+        pushErr(errors, "message.nodeId", "must be a non-empty string");
+      }
+      if (typeof value.nodeType !== "string" || !NODE_TYPES.includes(value.nodeType as NodeType)) {
+        pushErr(errors, "message.nodeType", `must be one of ${NODE_TYPES.join(", ")}`);
+      }
+      return finish(errors, () => ({
+        type: "updateNodeType",
+        nodeId: value.nodeId as string,
+        nodeType: value.nodeType as NodeType,
+      }));
     }
 
     case "updateNotes": {
@@ -257,10 +296,14 @@ export function validateWebviewMessage(value: unknown): MessageValidationResult 
       ) {
         pushErr(errors, "message.targetNodeId", "must differ from message.sourceNodeId (cannot merge a node into itself)");
       }
+      if (value.title !== undefined && (typeof value.title !== "string" || value.title.trim().length === 0)) {
+        pushErr(errors, "message.title", "must be a non-empty string when present");
+      }
       return finish(errors, () => ({
         type: "mergeNodes",
         sourceNodeId: value.sourceNodeId as string,
         targetNodeId: value.targetNodeId as string,
+        title: typeof value.title === "string" ? value.title.trim() : undefined,
       }));
     }
 
@@ -353,6 +396,18 @@ function unionSourceRefs(a: SourceReference[], b: SourceReference[]): SourceRefe
     }
   }
   return merged;
+}
+
+function mergeSummaries(targetSummary: string, sourceSummary: string): string {
+  const target = targetSummary.trim();
+  const source = sourceSummary.trim();
+  if (!target) {
+    return source;
+  }
+  if (!source || source === target) {
+    return target;
+  }
+  return `${target}\n\n${source}`;
 }
 
 /**
@@ -502,6 +557,8 @@ export function applyWebviewMessage(
     const mergedNotes = [target.notes, source.notes].map((n) => n.trim()).filter((n) => n.length > 0).join("\n\n");
     const mergedNode: RoadmapNode = {
       ...target,
+      title: message.title ?? target.title,
+      summary: mergeSummaries(target.summary, source.summary),
       tags: Array.from(new Set([...target.tags, ...source.tags])),
       notes: mergedNotes,
       sourceRefs: unionSourceRefs(target.sourceRefs, source.sourceRefs),
@@ -656,6 +713,12 @@ export function applyWebviewMessage(
       break;
     case "renameNode":
       updated = { ...existing, title: message.title, updatedAt: now };
+      break;
+    case "updateStatus":
+      updated = { ...existing, status: message.status, statusEdited: true, updatedAt: now };
+      break;
+    case "updateNodeType":
+      updated = { ...existing, nodeType: message.nodeType, updatedAt: now };
       break;
     case "updateNotes":
       updated = { ...existing, notes: message.notes, updatedAt: now };

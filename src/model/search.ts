@@ -42,8 +42,15 @@ export interface SearchFilters {
   tags?: string[];
   /** When true, only nodes with `highlighted: true` pass. */
   highlightedOnly?: boolean;
-  /** When true, only nodes reached via a "branch" edge (i.e. created by "Resume from here", Phase 7) pass. */
+  /** When true, only nodes reached via a "branch" edge pass. */
   branchesOnly?: boolean;
+}
+
+/** Unique non-empty tags currently used in a roadmap, sorted for stable filter controls. */
+export function collectAvailableTags(roadmap: Roadmap): string[] {
+  return Array.from(
+    new Set(roadmap.nodes.flatMap((node) => node.tags.map((tag) => tag.trim())).filter((tag) => tag.length > 0))
+  ).sort((a, b) => a.localeCompare(b));
 }
 
 function matchesTypeFilter(node: RoadmapNode, types: readonly NodeType[] | undefined): boolean {
@@ -68,7 +75,7 @@ function matchesTagsFilter(node: RoadmapNode, tags: readonly string[] | undefine
   return tags.some((tag) => node.tags.includes(tag));
 }
 
-/** Ids of nodes that are the *target* of at least one "branch" edge, i.e. resume branches (Phase 7). */
+/** Ids of nodes that are the *target* of at least one "branch" edge. */
 function collectBranchNodeIds(roadmap: Roadmap): Set<string> {
   const ids = new Set<string>();
   for (const edge of roadmap.edges) {

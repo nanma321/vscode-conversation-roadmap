@@ -8,11 +8,8 @@
  * host never disagree about what "matches".
  */
 import * as React from "react";
-import { NodeStatus, NodeType } from "../model/types";
+import { NODE_STATUSES, NODE_TYPES } from "../model/types";
 import { SearchFilters } from "../model/search";
-
-const ALL_TYPES: NodeType[] = ["topic", "decision", "question", "task", "outcome", "blocker"];
-const ALL_STATUSES: NodeStatus[] = ["open", "in-progress", "done", "blocked"];
 
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -23,11 +20,14 @@ export function SearchBar(props: {
   onQueryChange: (query: string) => void;
   filters: SearchFilters;
   onFiltersChange: (filters: SearchFilters) => void;
+  availableTags: string[];
   matchCount: number;
   totalCount: number;
 }): React.JSX.Element {
-  const { query, onQueryChange, filters, onFiltersChange, matchCount, totalCount } = props;
-  const tagsText = (filters.tags ?? []).join(", ");
+  const { query, onQueryChange, filters, onFiltersChange, availableTags, matchCount, totalCount } = props;
+  const tagOptions = Array.from(new Set([...availableTags, ...(filters.tags ?? [])])).sort((a, b) =>
+    a.localeCompare(b)
+  );
 
   return (
     <div className="search-bar" role="search" aria-label="Search and filter the roadmap">
@@ -48,7 +48,7 @@ export function SearchBar(props: {
       <div className="search-filter-row">
         <fieldset className="search-filters type-filters">
           <legend>Type</legend>
-          {ALL_TYPES.map((type) => (
+          {NODE_TYPES.map((type) => (
             <label key={type} className="filter-checkbox">
               <input
                 type="checkbox"
@@ -62,7 +62,7 @@ export function SearchBar(props: {
 
         <fieldset className="search-filters status-filters">
           <legend>Status</legend>
-          {ALL_STATUSES.map((status) => (
+          {NODE_STATUSES.map((status) => (
             <label key={status} className="filter-checkbox">
               <input
                 type="checkbox"
@@ -76,20 +76,27 @@ export function SearchBar(props: {
 
         <fieldset className="search-filters tag-filters">
           <legend>Tags</legend>
-          <input
-            type="text"
-            className="tags-filter-input"
-            placeholder="Comma-separated tags"
-            value={tagsText}
-            onChange={(e) => {
-              const tags = e.target.value
-                .split(",")
-                .map((t) => t.trim())
-                .filter((t) => t.length > 0);
-              onFiltersChange({ ...filters, tags: tags.length > 0 ? tags : undefined });
-            }}
-            aria-label="Filter by tags, comma-separated"
-          />
+          {tagOptions.length > 0 ? (
+            tagOptions.map((tag) => {
+              const selected = (filters.tags ?? []).includes(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  className={"tag-filter-chip" + (selected ? " selected" : "")}
+                  aria-pressed={selected}
+                  onClick={() => {
+                    const tags = toggle(filters.tags ?? [], tag);
+                    onFiltersChange({ ...filters, tags: tags.length > 0 ? tags : undefined });
+                  }}
+                >
+                  {tag}
+                </button>
+              );
+            })
+          ) : (
+            <span className="no-filter-options">No tags yet</span>
+          )}
         </fieldset>
 
         <fieldset className="search-filters display-filters">
@@ -109,7 +116,7 @@ export function SearchBar(props: {
               checked={Boolean(filters.branchesOnly)}
               onChange={(e) => onFiltersChange({ ...filters, branchesOnly: e.target.checked || undefined })}
             />
-            Resume branches only
+            Branch nodes only
           </label>
         </fieldset>
       </div>

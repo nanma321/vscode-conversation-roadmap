@@ -17,6 +17,8 @@
 import {
   CURRENT_SCHEMA_VERSION,
   EdgeKind,
+  NODE_STATUSES,
+  NODE_TYPES,
   NodeStatus,
   NodeType,
   Roadmap,
@@ -36,8 +38,6 @@ export const SCHEMA_DESCRIPTION = {
     "each with `nodes`, `edges`, and `settings`.",
 } as const;
 
-const NODE_STATUSES: readonly NodeStatus[] = ["open", "in-progress", "done", "blocked"];
-const NODE_TYPES: readonly NodeType[] = ["topic", "decision", "question", "task", "outcome", "blocker"];
 const EDGE_KINDS: readonly EdgeKind[] = ["topic", "branch", "manual"];
 
 /** The result of validating an unknown value against the roadmap document schema. */
@@ -118,6 +118,10 @@ function validateNode(value: unknown, path: string, errors: string[]): value is 
   }
   if (typeof value.status !== "string" || !NODE_STATUSES.includes(value.status as NodeStatus)) {
     pushError(errors, `${path}.status`, `must be one of ${NODE_STATUSES.join(", ")}`);
+    ok = false;
+  }
+  if (value.statusEdited !== undefined && typeof value.statusEdited !== "boolean") {
+    pushError(errors, `${path}.statusEdited`, "must be a boolean when present");
     ok = false;
   }
   if (value.nodeType !== undefined && !NODE_TYPES.includes(value.nodeType as NodeType)) {

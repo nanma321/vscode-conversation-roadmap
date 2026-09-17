@@ -1,16 +1,16 @@
 /**
  * Detail panel shown for the currently selected node: its source transcript
  * (the request/response turns it was derived from, resolved via
- * `sourceRefs`) plus an editing form for the user-owned fields (title,
- * notes, tags, color, highlight), and structural editing controls (Phase
+ * `sourceRefs`) plus an editing form for the user-owned fields (title, type,
+ * status, notes, tags, color, highlight), and structural editing controls (Phase
  * 6) to merge this node into another or split selected source turns off
  * into a new node. Every edit is sent immediately as a validated Webview
  * message (see `webviewMessages.ts`) so it is persisted and cannot be lost
- * on reload; the merge action is confirmed by the caller ({@link App})
- * before the message is sent, since it removes this node entirely.
+ * on reload; the merge action opens a review dialog in the caller
+ * ({@link App}) before the message is sent, since it removes this node.
  */
 import * as React from "react";
-import { Roadmap, RoadmapNode } from "../model/types";
+import { NODE_STATUSES, NODE_TYPES, NodeStatus, NodeType, Roadmap, RoadmapNode } from "../model/types";
 import type { TurnRecord } from "../turnStore";
 import { Markdown } from "./Markdown";
 
@@ -21,6 +21,8 @@ export function NodeDetailsPanel(props: {
   roadmap: Roadmap;
   turnsById: Map<string, TurnRecord>;
   onRename: (title: string) => void;
+  onUpdateStatus: (status: NodeStatus) => void;
+  onUpdateNodeType: (nodeType: NodeType) => void;
   onUpdateNotes: (notes: string) => void;
   onUpdateTags: (tags: string[]) => void;
   onUpdateColor: (color: string | null) => void;
@@ -29,8 +31,21 @@ export function NodeDetailsPanel(props: {
   onSplit: (title: string, sourceRefTurnIds: string[]) => void;
   onResume: () => void;
 }): React.JSX.Element {
-  const { node, roadmap, turnsById, onRename, onUpdateNotes, onUpdateTags, onUpdateColor, onToggleHighlight, onMergeInto, onSplit, onResume } =
-    props;
+  const {
+    node,
+    roadmap,
+    turnsById,
+    onRename,
+    onUpdateStatus,
+    onUpdateNodeType,
+    onUpdateNotes,
+    onUpdateTags,
+    onUpdateColor,
+    onToggleHighlight,
+    onMergeInto,
+    onSplit,
+    onResume,
+  } = props;
   const [titleDraft, setTitleDraft] = React.useState(node?.title ?? "");
   const [notesDraft, setNotesDraft] = React.useState(node?.notes ?? "");
   const [tagsDraft, setTagsDraft] = React.useState((node?.tags ?? []).join(", "));
@@ -89,15 +104,51 @@ export function NodeDetailsPanel(props: {
         />
       </div>
 
+      <div className="node-classification-fields">
+        <div className="field">
+          <label htmlFor="node-type">Type</label>
+          <select
+            id="node-type"
+            value={node.nodeType ?? "topic"}
+            onChange={(event) => onUpdateNodeType(event.target.value as NodeType)}
+          >
+            {NODE_TYPES.map((nodeType) => (
+              <option key={nodeType} value={nodeType}>
+                {nodeType}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label htmlFor="node-status">Status</label>
+          <select
+            id="node-status"
+            value={node.status}
+            onChange={(event) => onUpdateStatus(event.target.value as NodeStatus)}
+          >
+            {NODE_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div className="field">
-        <label htmlFor="node-notes">Notes</label>
+        <label htmlFor="node-notes">My notes</label>
         <textarea
           id="node-notes"
+          aria-describedby="node-notes-hint"
           value={notesDraft}
           onChange={(e) => setNotesDraft(e.target.value)}
           onBlur={() => onUpdateNotes(notesDraft)}
           rows={4}
         />
+        <p id="node-notes-hint" className="field-hint">
+          Personal context that automatic summaries never overwrite.
+        </p>
       </div>
 
       <div className="field">
@@ -116,10 +167,11 @@ export function NodeDetailsPanel(props: {
             )
           }
         />
+        <p className="field-hint">Reusable categories for finding related nodes across the roadmap.</p>
       </div>
 
       <div className="field">
-        <span id="node-color-label">Color</span>
+        <span id="node-color-label">Color (visual group)</span>
         <div role="group" aria-labelledby="node-color-label" className="color-swatches">
           {COLOR_SWATCHES.map((color) => (
             <button
@@ -136,6 +188,7 @@ export function NodeDetailsPanel(props: {
             &times;
           </button>
         </div>
+        <p className="field-hint">Use matching colors to visually group related nodes.</p>
       </div>
 
       <div className="field">
@@ -146,8 +199,9 @@ export function NodeDetailsPanel(props: {
             checked={Boolean(node.highlighted)}
             onChange={(e) => onToggleHighlight(e.target.checked)}
           />{" "}
-          Highlighted
+          Highlight as important
         </label>
+        <p className="field-hint">Adds an emphasis outline and can be filtered from the toolbar.</p>
       </div>
 
       <div className="field resume-action">
@@ -180,7 +234,7 @@ export function NodeDetailsPanel(props: {
               setMergeTargetId("");
             }}
           >
-            Merge
+            Review merge&hellip;
           </button>
         </div>
       </div>

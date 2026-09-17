@@ -1,6 +1,12 @@
 import * as assert from "assert";
 import { createDefaultSettings, Roadmap } from "../../src/model/types";
-import { SearchableTurn, filterNodes, matchesFilters, searchRoadmap } from "../../src/model/search";
+import {
+  SearchableTurn,
+  collectAvailableTags,
+  filterNodes,
+  matchesFilters,
+  searchRoadmap,
+} from "../../src/model/search";
 
 function sampleRoadmap(overrides: Partial<Roadmap> = {}): Roadmap {
   const now = new Date().toISOString();
@@ -60,6 +66,12 @@ const turns: SearchableTurn[] = [
 ];
 
 describe("search", () => {
+  it("collects unique non-empty tags in stable display order", () => {
+    const roadmap = sampleRoadmap();
+    roadmap.nodes[2].tags = ["planning", "  urgent  ", ""];
+    assert.deepStrictEqual(collectAvailableTags(roadmap), ["backend", "planning", "urgent"]);
+  });
+
   describe("matchesFilters / filterNodes", () => {
     it("returns all nodes when no filters are set", () => {
       const roadmap = sampleRoadmap();
@@ -90,7 +102,7 @@ describe("search", () => {
       assert.deepStrictEqual(results.map((n) => n.id), ["node-2"]);
     });
 
-    it("filters to only nodes created via a resume branch edge", () => {
+    it("filters to nodes targeted by a branch edge", () => {
       const roadmap = sampleRoadmap();
       const results = filterNodes(roadmap, { branchesOnly: true });
       assert.deepStrictEqual(results.map((n) => n.id), ["node-3"]);

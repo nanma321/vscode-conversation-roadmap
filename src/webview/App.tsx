@@ -10,13 +10,14 @@ import * as React from "react";
 import { Roadmap } from "../model/types";
 import type { TurnRecord } from "../turnStore";
 import type { HostToWebviewMessage, WebviewToHostMessage } from "../webviewMessages";
-import { SearchFilters, searchRoadmap } from "../model/search";
+import { SearchFilters, collectAvailableTags, searchRoadmap } from "../model/search";
 import { deriveSessionOptions, filterRoadmapBySession } from "./sessionFilter";
 import { GraphView } from "./GraphView";
 import { OutlineView } from "./OutlineView";
 import { SessionTranscriptView } from "./SessionTranscriptView";
 import { NodeDetailsPanel } from "./NodeDetailsPanel";
 import { EdgeDetailsPanel } from "./EdgeDetailsPanel";
+import { MergePreview } from "./MergePreview";
 import { ResumePreview } from "./ResumePreview";
 import { SearchBar } from "./SearchBar";
 import { VsCodeApi } from "./vscodeApi";
@@ -43,6 +44,9 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   // Node id currently being resumed from (Phase 7); non-null while the resume
   // preview modal is open.
   const [resumeNodeId, setResumeNodeId] = React.useState<string | null>(null);
+  const [mergeRequest, setMergeRequest] = React.useState<{ sourceNodeId: string; targetNodeId: string } | null>(
+    null
+  );
   // Search/filter state (Phase 8). Both are applied together via `search.ts`
   // so the Webview's matching logic never diverges from what is unit-tested
   // on the host side.
@@ -119,20 +123,6 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
     [post]
   );
 
-  const handleMergeNodes = React.useCallback(
-    (sourceNodeId: string, targetNodeId: string) => {
-      const sourceTitle = roadmap.nodes.find((n) => n.id === sourceNodeId)?.title || "(untitled)";
-      const targetTitle = roadmap.nodes.find((n) => n.id === targetNodeId)?.title || "(untitled)";
-      // Merging removes the source node entirely (its content is folded
-      // into the target); confirm since this cannot be undone from the
-      // canvas, only via the Undo command.
-      if (window.confirm(`Merge "${sourceTitle}" into "${targetTitle}"? "${sourceTitle}" will be removed.`)) {
-        post({ type: "mergeNodes", sourceNodeId, targetNodeId });
-      }
-    },
-    [post, roadmap]
-  );
-
   const handleSplitNode = React.useCallback(
     (nodeId: string, title: string, sourceRefTurnIds: string[]) => post({ type: "splitNode", nodeId, title, sourceRefTurnIds }),
     [post]
@@ -152,6 +142,12 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   const selectedNode = roadmap.nodes.find((n) => n.id === selectedNodeId) ?? null;
   const selectedEdge = roadmap.edges.find((e) => e.id === selectedEdgeId) ?? null;
   const resumeNode = roadmap.nodes.find((n) => n.id === resumeNodeId) ?? null;
+  const mergeSource = mergeRequest
+    ? roadmap.nodes.find((node) => node.id === mergeRequest.sourceNodeId) ?? null
+    : null;
+  const mergeTarget = mergeRequest
+    ? roadmap.nodes.find((node) => node.id === mergeRequest.targetNodeId) ?? null
+    : null;
   const turnsById = React.useMemo(() => new Map(turns.map((t) => [t.id, t])), [turns]);
 
   // Sessions available to filter by, and the session-narrowed view of the
@@ -166,6 +162,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
     () => filterRoadmapBySession(roadmap, sessionFilter),
     [roadmap, sessionFilter]
   );
+  const availableTags = React.useMemo(() => collectAvailableTags(visibleRoadmap), [visibleRoadmap]);
 
   // Recomputed on every roadmap/turns/query/filter change; `search.ts` is a
   // pure, cheap linear scan so there is no need to memoize beyond React's
@@ -242,6 +239,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
           onQueryChange={setSearchQuery}
           filters={searchFilters}
           onFiltersChange={setSearchFilters}
+          availableTags={availableTags}
           matchCount={matchedNodeIds.size}
           totalCount={roadmap.nodes.length}
         />
@@ -292,13 +290,21 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
               roadmap={roadmap}
               turnsById={turnsById}
               onRename={(title) => selectedNodeId && post({ type: "renameNode", nodeId: selectedNodeId, title })}
+              onUpdateStatus={(status) =>
+                selectedNodeId && post({ type: "updateStatus", nodeId: selectedNodeId, status })
+              }
+              onUpdateNodeType={(nodeType) =>
+                selectedNodeId && post({ type: "updateNodeType", nodeId: selectedNodeId, nodeType })
+              }
               onUpdateNotes={(notes) => selectedNodeId && post({ type: "updateNotes", nodeId: selectedNodeId, notes })}
               onUpdateTags={(tags) => selectedNodeId && post({ type: "updateTags", nodeId: selectedNodeId, tags })}
               onUpdateColor={(color) => selectedNodeId && post({ type: "updateColor", nodeId: selectedNodeId, color })}
               onToggleHighlight={(highlighted) =>
                 selectedNodeId && post({ type: "toggleHighlight", nodeId: selectedNodeId, highlighted })
               }
-              onMergeInto={(targetNodeId) => selectedNodeId && handleMergeNodes(selectedNodeId, targetNodeId)}
+              onMergeInto={(targetNodeId) =>
+                selectedNodeId && setMergeRequest({ sourceNodeId: selectedNodeId, targetNodeId })
+              }
               onSplit={(title, sourceRefTurnIds) => selectedNodeId && handleSplitNode(selectedNodeId, title, sourceRefTurnIds)}
               onResume={() => selectedNodeId && setResumeNodeId(selectedNodeId)}
             />
@@ -313,6 +319,23 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
           turnsById={turnsById}
           onSend={(question) => handleResumeSend(resumeNode.id, question)}
           onCancel={() => setResumeNodeId(null)}
+        />
+      ) : null}
+
+      {mergeSource && mergeTarget ? (
+        <MergePreview
+          source={mergeSource}
+          target={mergeTarget}
+          onConfirm={(title) => {
+            post({
+              type: "mergeNodes",
+              sourceNodeId: mergeSource.id,
+              targetNodeId: mergeTarget.id,
+              title,
+            });
+            setMergeRequest(null);
+          }}
+          onCancel={() => setMergeRequest(null)}
         />
       ) : null}
     </div>

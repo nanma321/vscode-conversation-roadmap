@@ -32,8 +32,8 @@ export function RoadmapFlowNode(props: { data: RoadmapFlowNodeData }): React.JSX
       <Handle type="target" position={Position.Top} />
       <div className="roadmap-flow-node-title">{node.title || "(untitled)"}</div>
       <div className="roadmap-flow-node-meta">
-        <span className={"badge status-" + node.status}>{node.status}</span>
-        {node.nodeType ? <span className="badge type">{node.nodeType}</span> : null}
+        <span className={"badge status-" + node.status}>Status: {node.status}</span>
+        <span className="badge type">Type: {node.nodeType ?? "topic"}</span>
       </div>
       {node.tags.length > 0 ? (
         <div className="roadmap-flow-node-tags">

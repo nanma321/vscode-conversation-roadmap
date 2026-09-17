@@ -116,6 +116,18 @@ body {
   gap: 0.25rem;
 }
 
+.node-classification-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.8em;
+  opacity: 0.75;
+}
+
 .field input[type="text"],
 .field textarea,
 .field select {
@@ -345,7 +357,8 @@ body {
   font-size: 0.8em;
   opacity: 0.75;
 }
-.resume-backdrop {
+.resume-backdrop,
+.modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
@@ -353,6 +366,57 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+}
+.merge-modal {
+  background: var(--vscode-editor-background, #1e1e1e);
+  color: var(--vscode-foreground);
+  border: 1px solid var(--vscode-panel-border, #454545);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  width: min(640px, 92vw);
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.merge-modal h2 {
+  margin-top: 0;
+}
+.merge-title-choice {
+  display: grid;
+  gap: 0.4rem;
+  margin: 1rem 0;
+  border: 1px solid var(--vscode-panel-border, #454545);
+}
+.merge-summary-preview {
+  display: grid;
+  gap: 0.5rem;
+}
+.merge-summary-preview h3 {
+  margin-bottom: 0;
+}
+.merge-summary-preview > div {
+  border: 1px solid var(--vscode-panel-border, #454545);
+  border-radius: 4px;
+  padding: 0.55rem;
+}
+.merge-summary-preview p {
+  margin: 0.35rem 0 0;
+  white-space: pre-wrap;
+}
+.merge-retention-list {
+  padding-left: 1.25rem;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.modal-actions button {
+  padding: 0.4rem 0.9rem;
+}
+.modal-actions button.primary {
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
 }
 .resume-modal {
   background: var(--vscode-editor-background, #1e1e1e);
@@ -432,8 +496,7 @@ body {
   flex-wrap: wrap;
 }
 
-.search-input,
-.tags-filter-input {
+.search-input {
   box-sizing: border-box;
   background: var(--vscode-input-background, #3c3c3c);
   color: var(--vscode-input-foreground, inherit);
@@ -472,8 +535,24 @@ body {
   flex: 1 1 15rem;
 }
 
-.tag-filters .tags-filter-input {
-  width: 100%;
+.tag-filter-chip {
+  border: 1px solid var(--vscode-panel-border, #888);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tag-filter-chip.selected {
+  border-color: var(--vscode-focusBorder, #007acc);
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+}
+
+.no-filter-options {
+  font-size: 0.8em;
+  opacity: 0.7;
 }
 
 .display-filters {

@@ -102,6 +102,28 @@ describe("validateWebviewMessage", () => {
     assert.strictEqual(result.valid, true);
   });
 
+  it("accepts supported status and node type edits", () => {
+    assert.strictEqual(
+      validateWebviewMessage({ type: "updateStatus", nodeId: "node-1", status: "in-progress" }).valid,
+      true
+    );
+    assert.strictEqual(
+      validateWebviewMessage({ type: "updateNodeType", nodeId: "node-1", nodeType: "decision" }).valid,
+      true
+    );
+  });
+
+  it("rejects unsupported status and node type edits", () => {
+    assert.strictEqual(
+      validateWebviewMessage({ type: "updateStatus", nodeId: "node-1", status: "paused" }).valid,
+      false
+    );
+    assert.strictEqual(
+      validateWebviewMessage({ type: "updateNodeType", nodeId: "node-1", nodeType: "idea" }).valid,
+      false
+    );
+  });
+
   it("rejects updateTags when tags is not an array of strings", () => {
     const result = validateWebviewMessage({ type: "updateTags", nodeId: "node-1", tags: ["ok", 5] });
     assert.strictEqual(result.valid, false);
@@ -183,6 +205,24 @@ describe("applyWebviewMessage", () => {
     assert.strictEqual(result.changed, true);
     assert.strictEqual(result.roadmap.nodes[0].notes, "My notes");
     assert.strictEqual(result.roadmap.nodes[0].summary, "Initial discussion");
+  });
+
+  it("updates status as a protected user edit and updates node type", () => {
+    const roadmap = sampleRoadmap();
+    const withStatus = applyWebviewMessage(roadmap, {
+      type: "updateStatus",
+      nodeId: "node-1",
+      status: "done",
+    });
+    assert.strictEqual(withStatus.roadmap.nodes[0].status, "done");
+    assert.strictEqual(withStatus.roadmap.nodes[0].statusEdited, true);
+
+    const withType = applyWebviewMessage(withStatus.roadmap, {
+      type: "updateNodeType",
+      nodeId: "node-1",
+      nodeType: "outcome",
+    });
+    assert.strictEqual(withType.roadmap.nodes[0].nodeType, "outcome");
   });
 
   it("replaces tags with the user-provided set", () => {
@@ -467,6 +507,19 @@ describe("applyWebviewMessage: merge operation", () => {
     const result = applyWebviewMessage(roadmap, { type: "mergeNodes", sourceNodeId: "node-2", targetNodeId: "node-1" });
     assert.deepStrictEqual([...result.roadmap.nodes[0].tags].sort(), ["follow-up", "planning"]);
     assert.match(result.roadmap.nodes[0].notes, /some notes/);
+  });
+
+  it("preserves both summaries and applies the title selected in the merge preview", () => {
+    const roadmap = sampleRoadmapWithTwoNodes();
+    const result = applyWebviewMessage(roadmap, {
+      type: "mergeNodes",
+      sourceNodeId: "node-2",
+      targetNodeId: "node-1",
+      title: "Follow-up",
+    });
+    assert.strictEqual(result.roadmap.nodes[0].title, "Follow-up");
+    assert.match(result.roadmap.nodes[0].summary, /Initial discussion/);
+    assert.match(result.roadmap.nodes[0].summary, /Second discussion/);
   });
 
   it("redirects edges referencing the removed source node to the target node", () => {

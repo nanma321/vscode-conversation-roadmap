@@ -120,6 +120,44 @@ describe("summarizeIncrementally", () => {
     assert.strictEqual(node.status, "blocked");
   });
 
+  it("never overwrites a status the user explicitly edited", () => {
+    const roadmap = makeEmptyRoadmap();
+    const now = new Date().toISOString();
+    roadmap.nodes.push({
+      id: "node-existing",
+      title: "Release planning",
+      summary: "Initial summary.",
+      status: "done",
+      statusEdited: true,
+      nodeType: "task",
+      tags: [],
+      notes: "",
+      sourceRefs: [{ turnId: "turn-0", sessionId: "session-fixture" }],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const turn = makeTurn({ id: "turn-3", request: "Any update?", response: "More work was suggested." });
+    const response: ModelSummaryResponse = {
+      schemaVersion: 1,
+      nodes: [
+        {
+          localId: "continued",
+          kind: "task",
+          title: "ignored on continue",
+          summary: "The model considers this in progress.",
+          status: "in-progress",
+          sourceTurnIds: [turn.id],
+          relation: "continue",
+          targetNodeId: "node-existing",
+        },
+      ],
+    };
+
+    const result = summarizeIncrementally(roadmap, response, [turn]);
+    assert.strictEqual(result.roadmap.nodes[0].status, "done");
+    assert.strictEqual(result.roadmap.nodes[0].statusEdited, true);
+  });
+
   it("never overwrites user-authored title, notes, or position on continuation", () => {
     const roadmap = makeEmptyRoadmap();
     const now = new Date().toISOString();

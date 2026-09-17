@@ -152,7 +152,7 @@ export function summarizeIncrementally(
       const updated: RoadmapNode = {
         ...existing,
         summary: extracted.summary,
-        status: extracted.status ?? existing.status,
+        status: existing.statusEdited ? existing.status : extracted.status ?? existing.status,
         tags: mergeTags(existing.tags, extracted.tags),
         sourceRefs: mergeSourceRefs(existing.sourceRefs, sourceRefs),
         updatedAt: now,

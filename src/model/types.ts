@@ -17,8 +17,11 @@
 /** Current version of the on-disk roadmap document schema. Bump on any breaking shape change and add a migration (see `migrations.ts`). */
 export const CURRENT_SCHEMA_VERSION = 1;
 
+/** Supported lifecycle states, shared by validation, filtering, and editing controls. */
+export const NODE_STATUSES = ["open", "in-progress", "done", "blocked"] as const;
+
 /** Lifecycle status of a roadmap node, set by summarization (Phase 4) or the user (Phase 5/6). */
-export type NodeStatus = "open" | "in-progress" | "done" | "blocked";
+export type NodeStatus = (typeof NODE_STATUSES)[number];
 
 /**
  * What kind of thing a node represents, as extracted by incremental
@@ -27,7 +30,9 @@ export type NodeStatus = "open" | "in-progress" | "done" | "blocked";
  * topic. Optional/absent on nodes persisted before this field existed,
  * which are treated as `"topic"` nodes.
  */
-export type NodeType = "topic" | "decision" | "question" | "task" | "outcome" | "blocker";
+export const NODE_TYPES = ["topic", "decision", "question", "task", "outcome", "blocker"] as const;
+
+export type NodeType = (typeof NODE_TYPES)[number];
 
 /** How an edge was created; used to distinguish semantic graph structure from pure layout (Phase 6). */
 export type EdgeKind = "topic" | "branch" | "manual";
@@ -90,6 +95,8 @@ export interface RoadmapNode {
   summary: string;
   /** Current lifecycle status. */
   status: NodeStatus;
+  /** True after the user changes status, preventing later automatic summaries from overwriting it. */
+  statusEdited?: boolean;
   /**
    * What kind of thing this node represents (topic, decision, question, task,
    * outcome, or blocker). Optional for backward compatibility with documents

@@ -101,6 +101,18 @@ describe("validateRoadmapDocument", () => {
     assert.ok(result.errors.some((e) => e.includes("status")));
   });
 
+  it("accepts a boolean statusEdited marker and rejects other values", () => {
+    const validDoc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    validDoc.roadmaps[0].nodes[0].statusEdited = true;
+    assert.strictEqual(validateRoadmapDocument(validDoc).valid, true);
+
+    const invalidDoc: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    (invalidDoc.roadmaps[0].nodes[0] as { statusEdited?: unknown }).statusEdited = "yes";
+    const result = validateRoadmapDocument(invalidDoc);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("statusEdited")));
+  });
+
   it("rejects an edge that references a non-existent node id", () => {
     const doc: RoadmapDocument = {
       version: 1,
