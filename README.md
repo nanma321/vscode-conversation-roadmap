@@ -148,9 +148,9 @@ preserved).
   tags already present in the selected session rather than requiring exact
   comma-separated input. Branches remain visible through their orange,
   animated connections instead of a separate technical branch-only filter.
-- **Compact controls**: **Hide search & filters** collapses the search area
-  while keeping the current query and filters active; the collapsed button
-  displays the current match count.
+- **Compact controls**: the funnel icon in the graph toolbar collapses the
+  search area while keeping the current query and filters active. Its
+  accessible label reports the current match count while collapsed.
 - **Graph-only cleanup**: **Clear all graphs** permanently removes every
   roadmap node and connection after a trusted VS Code confirmation, while
   retaining the captured session transcripts. Cleared transcripts are marked

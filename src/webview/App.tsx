@@ -219,15 +219,23 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
         {viewMode !== "transcript" ? (
           <button
             type="button"
+            className={"toolbar-icon-button" + (searchExpanded ? " active" : "")}
             aria-expanded={searchExpanded}
+            aria-pressed={searchExpanded}
             aria-controls="roadmap-search-filters"
+            aria-label={
+              searchExpanded
+                ? "Hide search and filters"
+                : `Show search and filters; ${matchedNodeIds.size} ${
+                    matchedNodeIds.size === 1 ? "node matches" : "nodes match"
+                  }`
+            }
+            title={searchExpanded ? "Hide search and filters" : "Show search and filters"}
             onClick={() => setSearchExpanded((expanded) => !expanded)}
           >
-            {searchExpanded
-              ? "Hide search & filters"
-              : `Show search & filters (${matchedNodeIds.size} ${
-                  matchedNodeIds.size === 1 ? "match" : "matches"
-                })`}
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+              <path d="M2.25 3.25h11.5L9.5 8v4.25l-3 1.5V8L2.25 3.25Z" />
+            </svg>
           </button>
         ) : null}
         <span className="toolbar-spacer" />
