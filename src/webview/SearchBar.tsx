@@ -110,6 +110,15 @@ export function SearchBar(props: {
             Highlighted only
           </label>
 
+          <label className="filter-checkbox">
+            <input
+              type="checkbox"
+              checked={Boolean(filters.newOnly)}
+              onChange={(e) => onFiltersChange({ ...filters, newOnly: e.target.checked || undefined })}
+            />
+            New nodes only
+          </label>
+
         </fieldset>
       </div>
     </div>

@@ -73,7 +73,7 @@ textarea:focus-visible,
 
 .toolbar button.danger-toolbar-button {
   background: transparent;
-  color: var(--vscode-foreground);
+  color: var(--vscode-errorForeground, #f48771);
   border-color: transparent;
 }
 
@@ -81,22 +81,6 @@ textarea:focus-visible,
   background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
   color: var(--vscode-inputValidation-errorForeground, #ffffff);
   border-color: var(--vscode-inputValidation-errorBorder, #be1100);
-}
-
-.toolbar-action-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.toolbar-action-button svg {
-  width: 1rem;
-  height: 1rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.25;
 }
 
 .toolbar button:disabled {
@@ -297,23 +281,29 @@ textarea:focus-visible,
   min-width: 140px;
 }
 
-.new-node-ribbon {
+.new-node-sticker {
   position: absolute;
-  top: 0.45rem;
-  right: -1.65rem;
+  top: -0.55rem;
+  right: 0.45rem;
   z-index: 2;
-  width: 5.25rem;
-  padding: 0.12rem 0;
-  transform: rotate(45deg);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  padding: 0.12rem 0.38rem;
   border: 1px solid currentColor;
+  border-radius: 999px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   line-height: 1.2;
-  text-align: center;
-  text-transform: uppercase;
   pointer-events: none;
+}
+
+.new-node-sticker svg {
+  width: 0.65rem;
+  height: 0.65rem;
+  fill: currentColor;
 }
 
 .new-outline-badge {
@@ -641,6 +631,24 @@ textarea:focus-visible,
 
 .display-filters {
   flex: 1 1 17rem;
+}
+
+@media (min-width: 1280px) {
+  .search-filter-row {
+    display: grid;
+    grid-template-columns:
+      minmax(30rem, 2fr)
+      minmax(20rem, 1.35fr)
+      minmax(12rem, 1fr)
+      minmax(11rem, 0.8fr);
+  }
+
+  .type-filters,
+  .status-filters,
+  .tag-filters,
+  .display-filters {
+    flex: none;
+  }
 }
 
 .search-filters legend {

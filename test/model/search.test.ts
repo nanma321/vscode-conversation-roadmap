@@ -102,6 +102,13 @@ describe("search", () => {
       assert.deepStrictEqual(results.map((n) => n.id), ["node-2"]);
     });
 
+    it("filters to only nodes in the newest creation batch", () => {
+      const roadmap = sampleRoadmap();
+      roadmap.nodes[2].isNew = true;
+      const results = filterNodes(roadmap, { newOnly: true });
+      assert.deepStrictEqual(results.map((n) => n.id), ["node-3"]);
+    });
+
     it("combines multiple filters with AND", () => {
       const roadmap = sampleRoadmap();
       const results = filterNodes(roadmap, { statuses: ["open"], tags: ["planning"] });

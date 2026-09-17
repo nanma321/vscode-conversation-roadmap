@@ -42,6 +42,8 @@ export interface SearchFilters {
   tags?: string[];
   /** When true, only nodes with `highlighted: true` pass. */
   highlightedOnly?: boolean;
+  /** When true, only nodes in the most recently created batch pass. */
+  newOnly?: boolean;
 }
 
 /** Unique non-empty tags currently used in a roadmap, sorted for stable filter controls. */
@@ -89,6 +91,9 @@ export function matchesFilters(node: RoadmapNode, filters: SearchFilters): boole
     return false;
   }
   if (filters.highlightedOnly && !node.highlighted) {
+    return false;
+  }
+  if (filters.newOnly && !node.isNew) {
     return false;
   }
   return true;

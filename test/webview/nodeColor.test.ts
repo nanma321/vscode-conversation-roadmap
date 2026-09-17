@@ -2,8 +2,8 @@ import * as assert from "assert";
 import {
   DEFAULT_NODE_BACKGROUND_FALLBACK,
   DEFAULT_NODE_FOREGROUND_FALLBACK,
-  NEW_NODE_RIBBON_BACKGROUND,
-  NEW_NODE_RIBBON_FOREGROUND,
+  NEW_NODE_STICKER_BACKGROUND,
+  NEW_NODE_STICKER_FOREGROUND,
   NODE_COLOR_SWATCHES,
   contrastRatio,
   contrastingTextColor,
@@ -19,9 +19,9 @@ describe("node color contrast", () => {
     );
   });
 
-  it("meets MAS 1.4.3 for the New ribbon text", () => {
+  it("meets MAS 1.4.3 for the New sticker text", () => {
     assert.ok(
-      contrastRatio(NEW_NODE_RIBBON_BACKGROUND, NEW_NODE_RIBBON_FOREGROUND) >=
+      contrastRatio(NEW_NODE_STICKER_BACKGROUND, NEW_NODE_STICKER_FOREGROUND) >=
         MAS_MINIMUM_CONTRAST
     );
   });

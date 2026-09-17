@@ -10,8 +10,8 @@ import { RoadmapNode } from "../model/types";
 import {
   DEFAULT_NODE_BACKGROUND_FALLBACK,
   DEFAULT_NODE_FOREGROUND_FALLBACK,
-  NEW_NODE_RIBBON_BACKGROUND,
-  NEW_NODE_RIBBON_FOREGROUND,
+  NEW_NODE_STICKER_BACKGROUND,
+  NEW_NODE_STICKER_FOREGROUND,
   contrastingTextColor,
 } from "./nodeColor";
 
@@ -48,10 +48,13 @@ export function RoadmapFlowNode(props: { data: RoadmapFlowNodeData }): React.JSX
     >
       {node.isNew ? (
         <span
-          className="new-node-ribbon"
-          style={{ background: NEW_NODE_RIBBON_BACKGROUND, color: NEW_NODE_RIBBON_FOREGROUND }}
+          className="new-node-sticker"
+          style={{ background: NEW_NODE_STICKER_BACKGROUND, color: NEW_NODE_STICKER_FOREGROUND }}
         >
-          New
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 12 12">
+            <path d="M6 1.25 7 4l2.75 1L7 6l-1 2.75L5 6 2.25 5 5 4l1-2.75Z" />
+          </svg>
+          <span>new</span>
         </span>
       ) : null}
       <Handle type="target" position={Position.Top} />
