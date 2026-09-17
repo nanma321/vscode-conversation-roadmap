@@ -262,6 +262,41 @@ describe("validateWebviewMessage: structural edits", () => {
     assert.strictEqual(result.valid, true);
   });
 
+  it("accepts a well-formed updateEdge message", () => {
+    const result = validateWebviewMessage({
+      type: "updateEdge",
+      edgeId: "edge-1",
+      source: "node-2",
+      target: "node-1",
+      kind: "branch",
+      label: "depends on",
+    });
+    assert.strictEqual(result.valid, true);
+  });
+
+  it("rejects updateEdge with a self-loop or unknown kind", () => {
+    assert.strictEqual(
+      validateWebviewMessage({
+        type: "updateEdge",
+        edgeId: "edge-1",
+        source: "node-1",
+        target: "node-1",
+        kind: "branch",
+      }).valid,
+      false
+    );
+    assert.strictEqual(
+      validateWebviewMessage({
+        type: "updateEdge",
+        edgeId: "edge-1",
+        source: "node-1",
+        target: "node-2",
+        kind: "curved",
+      }).valid,
+      false
+    );
+  });
+
   it("rejects mergeNodes with identical source and target ids", () => {
     const result = validateWebviewMessage({ type: "mergeNodes", sourceNodeId: "node-1", targetNodeId: "node-1" });
     assert.strictEqual(result.valid, false);
@@ -316,6 +351,81 @@ describe("applyWebviewMessage: user-defined edges", () => {
     const result = applyWebviewMessage(roadmap, { type: "deleteEdge", edgeId });
     assert.strictEqual(result.changed, true);
     assert.strictEqual(result.roadmap.edges.length, 0);
+  });
+
+  it("updates an edge's endpoints, label, and kind without replacing its id", () => {
+    const roadmap = sampleRoadmapWithTwoNodes({
+      edges: [{ id: "edge-1", source: "node-1", target: "node-2", kind: "topic" }],
+    });
+    const result = applyWebviewMessage(roadmap, {
+      type: "updateEdge",
+      edgeId: "edge-1",
+      source: "node-2",
+      target: "node-1",
+      kind: "manual",
+      label: "  revised  ",
+    });
+    assert.strictEqual(result.changed, true);
+    assert.deepStrictEqual(result.roadmap.edges[0], {
+      id: "edge-1",
+      source: "node-2",
+      target: "node-1",
+      kind: "manual",
+      label: "revised",
+    });
+  });
+
+  it("rejects updating an unknown edge, unknown endpoint, or duplicate connection", () => {
+    const roadmap = sampleRoadmapWithTwoNodes({
+      edges: [
+        { id: "edge-1", source: "node-1", target: "node-2", kind: "topic" },
+        { id: "edge-2", source: "node-2", target: "node-1", kind: "manual" },
+      ],
+    });
+    assert.strictEqual(
+      applyWebviewMessage(roadmap, {
+        type: "updateEdge",
+        edgeId: "missing",
+        source: "node-1",
+        target: "node-2",
+        kind: "topic",
+      }).changed,
+      false
+    );
+    assert.strictEqual(
+      applyWebviewMessage(roadmap, {
+        type: "updateEdge",
+        edgeId: "edge-1",
+        source: "missing",
+        target: "node-2",
+        kind: "topic",
+      }).changed,
+      false
+    );
+    assert.strictEqual(
+      applyWebviewMessage(roadmap, {
+        type: "updateEdge",
+        edgeId: "edge-1",
+        source: "node-2",
+        target: "node-1",
+        kind: "topic",
+      }).changed,
+      false
+    );
+  });
+
+  it("does not create an undo transaction when an edge edit changes nothing", () => {
+    const roadmap = sampleRoadmapWithTwoNodes({
+      edges: [{ id: "edge-1", source: "node-1", target: "node-2", kind: "topic" }],
+    });
+    const history = new RoadmapHistory();
+    const result = applyWebviewMessage(
+      roadmap,
+      { type: "updateEdge", edgeId: "edge-1", source: "node-1", target: "node-2", kind: "topic" },
+      history
+    );
+    assert.strictEqual(result.changed, false);
+    assert.strictEqual(history.canUndo(), false);
   });
 
   it("rejects deleteEdge for an unknown edge id", () => {

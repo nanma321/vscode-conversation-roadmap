@@ -115,12 +115,32 @@ body {
 }
 
 .field input[type="text"],
-.field textarea {
+.field textarea,
+.field select {
   background: var(--vscode-input-background, #3c3c3c);
   color: var(--vscode-input-foreground, inherit);
   border: 1px solid var(--vscode-input-border, transparent);
   padding: 0.3rem;
   font-family: inherit;
+}
+
+.validation-message {
+  color: var(--vscode-inputValidation-errorForeground, #f48771);
+  font-size: 0.85em;
+}
+
+.edge-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.edge-actions button {
+  padding: 0.35rem 0.65rem;
+}
+
+.danger-button {
+  color: var(--vscode-errorForeground, #f48771);
 }
 
 .color-swatches {
@@ -250,6 +270,11 @@ body {
 
 .roadmap-edge-branch .react-flow__edge-path {
   stroke: var(--vscode-charts-orange, #e2a336);
+}
+
+.roadmap-edge.selected .react-flow__edge-path {
+  stroke: var(--vscode-focusBorder, #007acc);
+  stroke-width: 4;
 }
 
 .session-transcript-view {

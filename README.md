@@ -133,6 +133,10 @@ preserved).
   (`src/dataDeletion.ts`) permanently erases every captured turn and
   roadmap graph after an explicit, modal confirmation, and refreshes any
   open graph panel to reflect the now-empty state.
+- **Direct connection editing**: click a line in Graph view to select it,
+  then change its source, destination, optional label, or line type in the
+  details panel. Saving participates in Undo/Redo; deletion is a separate
+  confirmed action.
 - **No telemetry**: this extension does not send any telemetry and has no
   dependency on `vscode.env.createTelemetryLogger` or similar APIs.
   Conversation content (turns, summaries, roadmap graphs) is stored only

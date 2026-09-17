@@ -16,6 +16,7 @@ import { GraphView } from "./GraphView";
 import { OutlineView } from "./OutlineView";
 import { SessionTranscriptView } from "./SessionTranscriptView";
 import { NodeDetailsPanel } from "./NodeDetailsPanel";
+import { EdgeDetailsPanel } from "./EdgeDetailsPanel";
 import { ResumePreview } from "./ResumePreview";
 import { SearchBar } from "./SearchBar";
 import { VsCodeApi } from "./vscodeApi";
@@ -34,6 +35,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   const [roadmap, setRoadmap] = React.useState<Roadmap>(initialState.roadmap);
   const [turns, setTurns] = React.useState<TurnRecord[]>(initialState.turns);
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
   const [viewMode, setViewMode] = React.useState<ViewMode>("graph");
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [canUndo, setCanUndo] = React.useState<boolean>(Boolean(initialState.canUndo));
@@ -66,6 +68,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
         // was removed by a structural edit elsewhere), rather than pointing
         // the details panel at stale data.
         setSelectedNodeId((current) => (current && message.roadmap.nodes.some((n) => n.id === current) ? current : null));
+        setSelectedEdgeId((current) => (current && message.roadmap.edges.some((e) => e.id === current) ? current : null));
       } else if (message.type === "error") {
         setErrorMessage(message.message);
       }
@@ -79,7 +82,17 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   const handleSelectNode = React.useCallback(
     (nodeId: string | null) => {
       setSelectedNodeId(nodeId);
+      setSelectedEdgeId(null);
       post({ type: "selectNode", nodeId });
+    },
+    [post]
+  );
+
+  const handleSelectEdge = React.useCallback(
+    (edgeId: string) => {
+      setSelectedEdgeId(edgeId);
+      setSelectedNodeId(null);
+      post({ type: "selectNode", nodeId: null });
     },
     [post]
   );
@@ -137,6 +150,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   );
 
   const selectedNode = roadmap.nodes.find((n) => n.id === selectedNodeId) ?? null;
+  const selectedEdge = roadmap.edges.find((e) => e.id === selectedEdgeId) ?? null;
   const resumeNode = roadmap.nodes.find((n) => n.id === resumeNodeId) ?? null;
   const turnsById = React.useMemo(() => new Map(turns.map((t) => [t.id, t])), [turns]);
 
@@ -251,32 +265,44 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
           <GraphView
             roadmap={visibleRoadmap}
             selectedNodeId={selectedNodeId}
+            selectedEdgeId={selectedEdgeId}
             matchedNodeIds={matchedNodeIds}
             onSelectNode={handleSelectNode}
             onMoveNode={handleMoveNode}
             onAddEdge={handleAddEdge}
-            onDeleteEdge={handleDeleteEdge}
+            onSelectEdge={handleSelectEdge}
           />
         ) : (
           <OutlineView roadmap={visibleRoadmap} selectedNodeId={selectedNodeId} matchedNodeIds={matchedNodeIds} onSelectNode={handleSelectNode} />
         )}
 
         {viewMode === "transcript" ? null : (
-          <NodeDetailsPanel
-            node={selectedNode}
-            roadmap={roadmap}
-            turnsById={turnsById}
-            onRename={(title) => selectedNodeId && post({ type: "renameNode", nodeId: selectedNodeId, title })}
-            onUpdateNotes={(notes) => selectedNodeId && post({ type: "updateNotes", nodeId: selectedNodeId, notes })}
-            onUpdateTags={(tags) => selectedNodeId && post({ type: "updateTags", nodeId: selectedNodeId, tags })}
-            onUpdateColor={(color) => selectedNodeId && post({ type: "updateColor", nodeId: selectedNodeId, color })}
-            onToggleHighlight={(highlighted) =>
-              selectedNodeId && post({ type: "toggleHighlight", nodeId: selectedNodeId, highlighted })
-            }
-            onMergeInto={(targetNodeId) => selectedNodeId && handleMergeNodes(selectedNodeId, targetNodeId)}
-            onSplit={(title, sourceRefTurnIds) => selectedNodeId && handleSplitNode(selectedNodeId, title, sourceRefTurnIds)}
-            onResume={() => selectedNodeId && setResumeNodeId(selectedNodeId)}
-          />
+          selectedEdge ? (
+            <EdgeDetailsPanel
+              edge={selectedEdge}
+              roadmap={roadmap}
+              onSave={(source, target, kind, label) =>
+                post({ type: "updateEdge", edgeId: selectedEdge.id, source, target, kind, label })
+              }
+              onDelete={() => handleDeleteEdge(selectedEdge.id)}
+            />
+          ) : (
+            <NodeDetailsPanel
+              node={selectedNode}
+              roadmap={roadmap}
+              turnsById={turnsById}
+              onRename={(title) => selectedNodeId && post({ type: "renameNode", nodeId: selectedNodeId, title })}
+              onUpdateNotes={(notes) => selectedNodeId && post({ type: "updateNotes", nodeId: selectedNodeId, notes })}
+              onUpdateTags={(tags) => selectedNodeId && post({ type: "updateTags", nodeId: selectedNodeId, tags })}
+              onUpdateColor={(color) => selectedNodeId && post({ type: "updateColor", nodeId: selectedNodeId, color })}
+              onToggleHighlight={(highlighted) =>
+                selectedNodeId && post({ type: "toggleHighlight", nodeId: selectedNodeId, highlighted })
+              }
+              onMergeInto={(targetNodeId) => selectedNodeId && handleMergeNodes(selectedNodeId, targetNodeId)}
+              onSplit={(title, sourceRefTurnIds) => selectedNodeId && handleSplitNode(selectedNodeId, title, sourceRefTurnIds)}
+              onResume={() => selectedNodeId && setResumeNodeId(selectedNodeId)}
+            />
+          )
         )}
       </div>
 

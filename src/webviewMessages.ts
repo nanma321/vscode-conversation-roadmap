@@ -31,6 +31,8 @@ export type WebviewToHostMessage =
   | { type: "toggleHighlight"; nodeId: string; highlighted: boolean }
   /** Creates a user-defined ("manual") edge between two existing nodes (Phase 6). Distinct from the AI-generated "topic"/"branch" edges the summarizer creates. */
   | { type: "addEdge"; source: string; target: string; label?: string }
+  /** Updates an existing edge's endpoints, label, and semantic/display kind. */
+  | { type: "updateEdge"; edgeId: string; source: string; target: string; kind: RoadmapEdge["kind"]; label?: string }
   /** Removes a single edge. Destructive - the Webview must confirm with the user before sending this. */
   | { type: "deleteEdge"; edgeId: string }
   /** Merges `sourceNodeId` into `targetNodeId`, combining their provenance/tags/notes and removing the source node. Destructive - the Webview must confirm with the user before sending this. */
@@ -201,6 +203,35 @@ export function validateWebviewMessage(value: unknown): MessageValidationResult 
         type: "addEdge",
         source: value.source as string,
         target: value.target as string,
+        label: value.label as string | undefined,
+      }));
+    }
+
+    case "updateEdge": {
+      if (!isNonEmptyString(value.edgeId)) {
+        pushErr(errors, "message.edgeId", "must be a non-empty string");
+      }
+      if (!isNonEmptyString(value.source)) {
+        pushErr(errors, "message.source", "must be a non-empty string");
+      }
+      if (!isNonEmptyString(value.target)) {
+        pushErr(errors, "message.target", "must be a non-empty string");
+      }
+      if (isNonEmptyString(value.source) && isNonEmptyString(value.target) && value.source === value.target) {
+        pushErr(errors, "message.target", "must not be the same node as message.source (no self-loop edges)");
+      }
+      if (value.kind !== "topic" && value.kind !== "branch" && value.kind !== "manual") {
+        pushErr(errors, "message.kind", 'must be "topic", "branch", or "manual"');
+      }
+      if (value.label !== undefined && typeof value.label !== "string") {
+        pushErr(errors, "message.label", "must be a string when present");
+      }
+      return finish(errors, () => ({
+        type: "updateEdge",
+        edgeId: value.edgeId as string,
+        source: value.source as string,
+        target: value.target as string,
+        kind: value.kind as RoadmapEdge["kind"],
         label: value.label as string | undefined,
       }));
     }
@@ -405,6 +436,48 @@ export function applyWebviewMessage(
     };
     history?.record(roadmap);
     return { roadmap: { ...roadmap, edges: [...roadmap.edges, edge], updatedAt: now }, errors: [], changed: true };
+  }
+
+  if (message.type === "updateEdge") {
+    const edgeIndex = roadmap.edges.findIndex((edge) => edge.id === message.edgeId);
+    if (edgeIndex === -1) {
+      return { roadmap, errors: [`message.edgeId: no edge with id "${message.edgeId}" exists in this roadmap`], changed: false };
+    }
+    if (!roadmap.nodes.some((node) => node.id === message.source)) {
+      return { roadmap, errors: [`message.source: no node with id "${message.source}" exists in this roadmap`], changed: false };
+    }
+    if (!roadmap.nodes.some((node) => node.id === message.target)) {
+      return { roadmap, errors: [`message.target: no node with id "${message.target}" exists in this roadmap`], changed: false };
+    }
+    if (
+      roadmap.edges.some(
+        (edge) => edge.id !== message.edgeId && edge.source === message.source && edge.target === message.target
+      )
+    ) {
+      return { roadmap, errors: [`an edge from "${message.source}" to "${message.target}" already exists`], changed: false };
+    }
+
+    const existing = roadmap.edges[edgeIndex];
+    const label = message.label?.trim() || undefined;
+    if (
+      existing.source === message.source &&
+      existing.target === message.target &&
+      existing.kind === message.kind &&
+      existing.label === label
+    ) {
+      return { roadmap, errors: [], changed: false };
+    }
+
+    const edges = [...roadmap.edges];
+    edges[edgeIndex] = {
+      ...existing,
+      source: message.source,
+      target: message.target,
+      kind: message.kind,
+      label,
+    };
+    history?.record(roadmap);
+    return { roadmap: { ...roadmap, edges, updatedAt: now }, errors: [], changed: true };
   }
 
   if (message.type === "deleteEdge") {

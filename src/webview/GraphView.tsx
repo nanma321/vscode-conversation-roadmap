@@ -45,7 +45,7 @@ function toFlowNodes(roadmap: Roadmap, selectedNodeId: string | null, matchedNod
  * plain solid lines. None of this styling is persisted - it is derived
  * purely from each edge's `kind` every render.
  */
-function toFlowEdges(roadmap: Roadmap): Edge[] {
+function toFlowEdges(roadmap: Roadmap, selectedEdgeId: string | null): Edge[] {
   return roadmap.edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
@@ -53,7 +53,8 @@ function toFlowEdges(roadmap: Roadmap): Edge[] {
     label: edge.label,
     animated: edge.kind === "branch",
     style: edge.kind === "manual" ? { strokeDasharray: "6 4" } : undefined,
-    className: `roadmap-edge roadmap-edge-${edge.kind}`,
+    className: `roadmap-edge roadmap-edge-${edge.kind}${edge.id === selectedEdgeId ? " selected" : ""}`,
+    selected: edge.id === selectedEdgeId,
   }));
 }
 
@@ -73,14 +74,15 @@ function FitOnLoad(): null {
 export function GraphView(props: {
   roadmap: Roadmap;
   selectedNodeId: string | null;
+  selectedEdgeId: string | null;
   /** Ids of nodes currently matching the search query/filters (Phase 8); unmatched nodes render dimmed rather than being hidden, so the graph's overall shape stays visible. */
   matchedNodeIds: ReadonlySet<string>;
   onSelectNode: (nodeId: string | null) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   onAddEdge: (source: string, target: string) => void;
-  onDeleteEdge: (edgeId: string) => void;
+  onSelectEdge: (edgeId: string) => void;
 }): React.JSX.Element {
-  const { roadmap, selectedNodeId, matchedNodeIds, onSelectNode, onMoveNode, onAddEdge, onDeleteEdge } = props;
+  const { roadmap, selectedNodeId, selectedEdgeId, matchedNodeIds, onSelectNode, onMoveNode, onAddEdge, onSelectEdge } = props;
   const [nodes, setNodes] = React.useState<Node<RoadmapFlowNodeData>[]>(() =>
     toFlowNodes(roadmap, selectedNodeId, matchedNodeIds)
   );
@@ -89,7 +91,7 @@ export function GraphView(props: {
     setNodes(toFlowNodes(roadmap, selectedNodeId, matchedNodeIds));
   }, [roadmap, selectedNodeId, matchedNodeIds]);
 
-  const edges = React.useMemo(() => toFlowEdges(roadmap), [roadmap]);
+  const edges = React.useMemo(() => toFlowEdges(roadmap, selectedEdgeId), [roadmap, selectedEdgeId]);
 
   const handleNodesChange = React.useCallback((changes: NodeChange[]) => {
     setNodes((current) => applyNodeChanges(changes, current));
@@ -128,9 +130,9 @@ export function GraphView(props: {
 
   const handleEdgeClick = React.useCallback(
     (_event: React.MouseEvent, edge: Edge) => {
-      onDeleteEdge(edge.id);
+      onSelectEdge(edge.id);
     },
-    [onDeleteEdge]
+    [onSelectEdge]
   );
 
   return (
