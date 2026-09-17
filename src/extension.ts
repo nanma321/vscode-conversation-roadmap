@@ -2,12 +2,24 @@ import * as vscode from "vscode";
 import { TurnStore } from "./turnStore";
 import { RoadmapStore } from "./model/roadmapStore";
 import { registerRoadmapParticipant } from "./chatParticipant";
-import { disposeGraphWebview, showGraphWebview, updateGraph, resumeSelectedNode } from "./webviewPanel";
+import {
+  closeRestoredGraphTabs,
+  disposeGraphWebview,
+  showGraphWebview,
+  updateGraph,
+  resumeSelectedNode,
+} from "./webviewPanel";
 import { exportMarkdownOutlineCommand, exportRoadmapCommand, importRoadmapCommand } from "./importExportCommands";
 import { deleteAllDataCommand } from "./dataDeletion";
 import { RequestSummary, SummarizationService } from "./summarization/summarizationService";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  // VS Code saves its editor layout before extension deactivation, so a graph
+  // tab can be restored even though deactivate() disposed its panel. Remove
+  // only this extension's restored webview tabs at startup; persisted roadmap
+  // data remains untouched and the graph can be reopened from its command.
+  await closeRestoredGraphTabs();
+
   // Storage lives under globalStorageUri so captured turns persist across
   // window reloads and VS Code restarts (confirmed by the "Roadmap: Open
   // Graph" command re-reading this same directory after a restart).
@@ -130,8 +142,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
-  // Explicitly close the editor tab before VS Code persists its window layout.
-  // Captured turns and roadmap edits are already durable and remain available
-  // through "Roadmap: Open Graph" after the next launch.
+  // Best-effort immediate cleanup; activate() also removes any tab that VS Code
+  // already persisted and restored before this hook ran.
   disposeGraphWebview();
 }

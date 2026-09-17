@@ -28,6 +28,8 @@ import { buildResumeContext, formatResumeQuery, ResumeSourceTurn } from "./resum
 import { buildContentSecurityPolicy } from "./webviewCsp";
 import { loadDefaultRoadmap, saveRoadmap } from "./model/defaultRoadmap";
 
+export const GRAPH_VIEW_TYPE = "conversationRoadmap.graph";
+
 let currentPanel: vscode.WebviewPanel | undefined;
 let currentRoadmapStore: RoadmapStore | undefined;
 let currentTurnStore: TurnStore | undefined;
@@ -47,6 +49,27 @@ export function disposeGraphWebview(): void {
   currentRoadmapStore = undefined;
   currentTurnStore = undefined;
   currentSelectedNodeId = null;
+}
+
+/**
+ * Removes graph tabs that VS Code restored from its saved window layout.
+ * Window state is persisted before extension deactivation, so shutdown
+ * disposal alone cannot reliably prevent those tabs from returning.
+ */
+export async function closeRestoredGraphTabs(): Promise<void> {
+  const restoredTabs = vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .filter(
+      (tab) => tab.input instanceof vscode.TabInputWebview && tab.input.viewType === GRAPH_VIEW_TYPE
+    );
+  if (restoredTabs.length > 0) {
+      const closed = await vscode.window.tabGroups.close(restoredTabs, true);
+      if (!closed) {
+        void vscode.window.showWarningMessage(
+          "Conversation Roadmap could not close a graph tab restored by VS Code. Close the tab manually."
+        );
+      }
+    }
 }
 
 function getNonce(): string {
@@ -223,7 +246,7 @@ export async function showGraphWebview(
   }
 
   const panel = vscode.window.createWebviewPanel(
-    "conversationRoadmap.graph",
+    GRAPH_VIEW_TYPE,
     "Roadmap Graph",
     vscode.ViewColumn.Beside,
     {
