@@ -54,6 +54,8 @@ export interface TurnRecord {
    * Excluded turns stay readable but are never automatically summarized again.
    */
   roadmapExcluded?: boolean;
+  /** Existing resume placeholder node this turn was submitted from, when applicable. */
+  resumeNodeId?: string;
   /**
    * Supported references attached to the request (e.g. files or selections).
    * Turns persisted before references were captured are normalized to `[]` on load.

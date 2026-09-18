@@ -17,9 +17,9 @@ Markdown, or SVG.
 [Watch the 76-second narrated demo](docs/media/conversation-roadmap-demo.mp4)
 · [Read the demo transcript](docs/media/DEMO_SCRIPT.md)
 
-## Install the 0.1.1 beta
+## Install the 0.1.2 beta
 
-1. Download [conversation-roadmap-0.1.1.vsix](https://github.com/nanma321/vscode-conversation-roadmap/releases/download/v0.1.1/conversation-roadmap-0.1.1.vsix).
+1. Download [conversation-roadmap-0.1.2.vsix](https://github.com/nanma321/vscode-conversation-roadmap/releases/download/v0.1.2/conversation-roadmap-0.1.2.vsix).
 2. In VS Code 1.137 or later, open the Extensions view and choose
    **Install from VSIX...** from the `...` menu.
 3. Select the downloaded file and reload VS Code when prompted.
@@ -27,7 +27,7 @@ Markdown, or SVG.
 You can also install from a terminal:
 
 ```powershell
-code --install-extension conversation-roadmap-0.1.1.vsix
+code --install-extension conversation-roadmap-0.1.2.vsix
 ```
 
 ## Features

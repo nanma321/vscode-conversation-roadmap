@@ -1,6 +1,6 @@
 # Troubleshooting & Known Limitations
 
-Conversation Roadmap 0.1.1 requires VS Code 1.137 or later. Older versions are
+Conversation Roadmap 0.1.2 requires VS Code 1.137 or later. Older versions are
 blocked at installation because their non-submitting chat-prefill behavior is
 not compatible with this release.
 

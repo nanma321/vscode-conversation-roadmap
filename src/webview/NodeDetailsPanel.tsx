@@ -145,6 +145,13 @@ export function NodeDetailsPanel(props: {
         </div>
       </div>
 
+      <div className="field resume-action">
+        <button type="button" className="resume-button" onClick={onResume}>
+          Resume from here&hellip;
+        </button>
+        <p className="resume-hint">Starts a new branch from this node without changing the original path.</p>
+      </div>
+
       <div className="field">
         <label htmlFor="node-notes">My notes</label>
         <textarea
@@ -211,13 +218,6 @@ export function NodeDetailsPanel(props: {
           Highlight as important
         </label>
         <p className="field-hint">Adds an emphasis outline and can be filtered from the toolbar.</p>
-      </div>
-
-      <div className="field resume-action">
-        <button type="button" className="resume-button" onClick={onResume}>
-          Resume from here&hellip;
-        </button>
-        <p className="resume-hint">Starts a new branch from this node without changing the original path.</p>
       </div>
 
       <div className="field structural-edit">

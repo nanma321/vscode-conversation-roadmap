@@ -14,6 +14,7 @@ import {
   NEW_NODE_STICKER_FOREGROUND,
   contrastingTextColor,
 } from "./nodeColor";
+import { previewTags } from "./tagDisplay";
 
 export interface RoadmapFlowNodeData {
   node: RoadmapNode;
@@ -34,6 +35,7 @@ export function RoadmapFlowNode(props: { data: RoadmapFlowNodeData }): React.JSX
         background: `var(--vscode-editorWidget-background, ${DEFAULT_NODE_BACKGROUND_FALLBACK})`,
         color: `var(--vscode-editorWidget-foreground, var(--vscode-foreground, ${DEFAULT_NODE_FOREGROUND_FALLBACK}))`,
       };
+  const tagPreview = previewTags(node.tags);
   return (
     <div
       className={
@@ -66,11 +68,20 @@ export function RoadmapFlowNode(props: { data: RoadmapFlowNodeData }): React.JSX
       </div>
       {node.tags.length > 0 ? (
         <div className="roadmap-flow-node-tags">
-          {node.tags.map((tag) => (
+          {tagPreview.visible.map((tag) => (
             <span className="tag" key={tag}>
               {tag}
             </span>
           ))}
+          {tagPreview.hidden.length > 0 ? (
+            <span
+              className="tag tag-overflow"
+              aria-label={`${tagPreview.hidden.length} more tags`}
+              title={tagPreview.hidden.join(", ")}
+            >
+              +{tagPreview.hidden.length}
+            </span>
+          ) : null}
         </div>
       ) : null}
       <Handle type="source" position={Position.Bottom} />

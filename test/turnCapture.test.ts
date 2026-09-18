@@ -126,5 +126,18 @@ describe("turnCapture", () => {
       assert.strictEqual(record.completed, false);
       assert.strictEqual(record.response, "partial");
     });
+
+    it("preserves the resume placeholder id as turn metadata", () => {
+      const record = buildTurnRecord({
+        id: "turn-resume",
+        sessionId: "session-2",
+        timestamp: "2024-01-01T00:00:02.000Z",
+        request: "Continue this branch",
+        resumeNodeId: "node-resume-1",
+        outcome: successOutcome("Response"),
+        references: [],
+      });
+      assert.strictEqual(record.resumeNodeId, "node-resume-1");
+    });
   });
 });

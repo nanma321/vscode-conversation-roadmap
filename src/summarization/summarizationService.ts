@@ -28,6 +28,7 @@ import { buildSummarizationPrompt } from "./prompt";
 import { summarizeIncrementally, SummarizationResult } from "./applySummary";
 import { buildQuestionBackfill, ensureQuestionNodes } from "./ensureQuestionNodes";
 import { validateModelSummaryResponse } from "./summaryResponseSchema";
+import { attachResumeTurns } from "./resumeAttachment";
 
 /** Signature of the injected model call: takes the prompt, returns the model's raw text response. */
 export type RequestSummary = (prompt: string) => Promise<string>;
@@ -65,8 +66,22 @@ function toTurn(record: TurnRecord): Turn {
     request: record.request,
     response: record.response,
     completed: record.completed,
+    resumeNodeId: record.resumeNodeId,
     references: record.references ?? [],
   };
+}
+
+function toTurnsWithResumeAffinity(records: readonly TurnRecord[]): Turn[] {
+  const activeResumeBySession = new Map<string, string>();
+  return records.map((record) => {
+    if (record.resumeNodeId) {
+      activeResumeBySession.set(record.sessionId, record.resumeNodeId);
+    }
+    return {
+      ...toTurn(record),
+      branchRootNodeId: activeResumeBySession.get(record.sessionId),
+    };
+  });
 }
 
 /**
@@ -77,8 +92,17 @@ function toTurn(record: TurnRecord): Turn {
  * any source turns (e.g. resume branches) carry no session and are excluded
  * from this context.
  */
-function sessionScopedRoadmap(roadmap: Roadmap, sessionId: string): Roadmap {
-  const nodes = roadmap.nodes.filter((n) => n.sourceRefs.some((r) => r.sessionId === sessionId));
+function sessionScopedRoadmap(
+  roadmap: Roadmap,
+  sessionId: string,
+  resumeNodeIds: readonly string[] = []
+): Roadmap {
+  const resumedFrom = new Set(resumeNodeIds);
+  const nodes = roadmap.nodes.filter(
+    (node) =>
+      resumedFrom.has(node.id) ||
+      node.sourceRefs.some((reference) => reference.sessionId === sessionId)
+  );
   const keptIds = new Set(nodes.map((n) => n.id));
   const edges = roadmap.edges.filter((e) => keptIds.has(e.source) && keptIds.has(e.target));
   return { ...roadmap, nodes, edges };
@@ -157,6 +181,8 @@ export class SummarizationService {
     let currentRoadmap = backfill.roadmap;
     let changedAny = backfill.changed;
     const errors: string[] = [...backfill.errors];
+    const domainTurns = toTurnsWithResumeAffinity(allTurns);
+    const domainTurnsById = new Map(domainTurns.map((turn) => [turn.id, turn]));
 
     // A turn is "already summarized" if any node already references it; combine
     // that with the in-memory attempted set so we neither re-summarize nor
@@ -194,8 +220,17 @@ export class SummarizationService {
     // new turns onto an unrelated earlier session's nodes. Changes still apply
     // to the full roadmap, so other sessions' nodes are preserved.
     for (const sessionId of this.orderedSessionIds(pending)) {
-      const sessionTurns = pending.filter((t) => t.sessionId === sessionId).map(toTurn);
-      const scopedRoadmap = sessionScopedRoadmap(currentRoadmap, sessionId);
+      const sessionTurns = pending
+        .filter((turn) => turn.sessionId === sessionId)
+        .map((turn) => domainTurnsById.get(turn.id))
+        .filter((turn): turn is Turn => Boolean(turn));
+      const scopedRoadmap = sessionScopedRoadmap(
+        currentRoadmap,
+        sessionId,
+        sessionTurns
+          .map((turn) => turn.branchRootNodeId)
+          .filter((nodeId): nodeId is string => Boolean(nodeId))
+      );
       const prompt = buildSummarizationPrompt(sessionTurns, scopedRoadmap);
 
       let rawResponse: string;
@@ -221,10 +256,10 @@ export class SummarizationService {
         continue;
       }
       const response = ensureQuestionNodes(
-        validation.value,
+        attachResumeTurns(validation.value, sessionTurns, currentRoadmap),
         sessionTurns,
         scopedRoadmap,
-        allTurns.map(toTurn)
+        domainTurns
       );
       const result: SummarizationResult = summarizeIncrementally(currentRoadmap, response, sessionTurns);
       if (result.changed) {
@@ -247,9 +282,14 @@ export class SummarizationService {
     roadmap: Roadmap,
     allTurns: TurnRecord[]
   ): SummarizeOutcome {
-    const allDomainTurns = allTurns
-      .filter((turn) => turn.completed && !turn.roadmapExcluded)
-      .map(toTurn);
+    const eligibleTurnIds = new Set(
+      allTurns
+        .filter((turn) => turn.completed && !turn.roadmapExcluded)
+        .map((turn) => turn.id)
+    );
+    const allDomainTurns = toTurnsWithResumeAffinity(allTurns).filter((turn) =>
+      eligibleTurnIds.has(turn.id)
+    );
     let currentRoadmap = roadmap;
     let changed = false;
     const errors: string[] = [];
@@ -258,7 +298,13 @@ export class SummarizationService {
       allTurns.filter((turn) => turn.completed && !turn.roadmapExcluded)
     )) {
       const sessionTurns = allDomainTurns.filter((turn) => turn.sessionId === sessionId);
-      const scopedRoadmap = sessionScopedRoadmap(currentRoadmap, sessionId);
+      const scopedRoadmap = sessionScopedRoadmap(
+        currentRoadmap,
+        sessionId,
+        sessionTurns
+          .map((turn) => turn.branchRootNodeId)
+          .filter((nodeId): nodeId is string => Boolean(nodeId))
+      );
       const backfill = buildQuestionBackfill(scopedRoadmap, sessionTurns, allDomainTurns);
       if (backfill.turns.length === 0) {
         continue;

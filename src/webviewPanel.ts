@@ -217,7 +217,14 @@ async function performResume(nodeId: string, question: string | undefined): Prom
   // Build the context/query from the *pre-branch* roadmap (the ancestor path of
   // the source node), which is exactly the context the preview showed.
   const context = buildResumeContext(roadmap, nodeId, turnsById);
-  await startResumeInteraction(formatResumeQuery(context, question));
+  const resumeNode = result.roadmap.nodes.find(
+    (candidate) => !roadmap.nodes.some((existing) => existing.id === candidate.id)
+  );
+  if (!resumeNode) {
+    postError(["resume branch was created without a corresponding placeholder node"]);
+    return;
+  }
+  await startResumeInteraction(formatResumeQuery(context, question, resumeNode.id));
 }
 
 /**

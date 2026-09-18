@@ -98,6 +98,12 @@ export function ensureQuestionNodes(
     if (!key || knownQuestionKeys.has(key)) {
       continue;
     }
+    // The first resumed response is folded into its pre-created placeholder,
+    // so that existing node already represents this request.
+    if (turn.resumeNodeId) {
+      knownQuestionKeys.add(key);
+      continue;
+    }
     if (createdNodeCoversTurn(response, turn.id)) {
       knownQuestionKeys.add(key);
       continue;

@@ -15,51 +15,61 @@
  */
 import { NodePosition, RoadmapEdge, RoadmapNode } from "../model/types";
 
-const COLUMN_WIDTH = 260;
+const COLUMN_WIDTH = 240;
 const LEVEL_HEIGHT = 150;
+
+function buildPrimaryHierarchy(nodes: RoadmapNode[], edges: RoadmapEdge[]): {
+  primaryParent: Map<string, string>;
+  childrenOf: Map<string, string[]>;
+} {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const primaryParent = new Map<string, string>();
+  const childrenOf = new Map<string, string[]>();
+  edges.forEach((edge) => {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target) || primaryParent.has(edge.target)) {
+      return;
+    }
+    primaryParent.set(edge.target, edge.source);
+    const children = childrenOf.get(edge.source) ?? [];
+    children.push(edge.target);
+    childrenOf.set(edge.source, children);
+  });
+  return { primaryParent, childrenOf };
+}
 
 /** Computes a deterministic fallback position for every node, ignoring any manual `position` already set. */
 export function computeAutoLayout(nodes: RoadmapNode[], edges: RoadmapEdge[]): Map<string, NodePosition> {
   const positions = new Map<string, NodePosition>();
-  const incomingCount = new Map<string, number>();
-  const childrenOf = new Map<string, string[]>();
+  const { primaryParent, childrenOf } = buildPrimaryHierarchy(nodes, edges);
 
-  nodes.forEach((n) => incomingCount.set(n.id, 0));
-  edges.forEach((e) => {
-    if (incomingCount.has(e.target)) {
-      incomingCount.set(e.target, (incomingCount.get(e.target) ?? 0) + 1);
-    }
-    if (!childrenOf.has(e.source)) {
-      childrenOf.set(e.source, []);
-    }
-    childrenOf.get(e.source)!.push(e.target);
-  });
-
-  const roots = nodes.filter((n) => (incomingCount.get(n.id) ?? 0) === 0).map((n) => n.id);
+  const roots = nodes.filter((node) => !primaryParent.has(node.id)).map((node) => node.id);
   const visited = new Set<string>();
-  const rowCountByLevel = new Map<number, number>();
+  let nextLeafColumn = 0;
 
   function place(nodeId: string, level: number): void {
     if (visited.has(nodeId)) {
       return;
     }
     visited.add(nodeId);
-    const column = rowCountByLevel.get(level) ?? 0;
-    positions.set(nodeId, { x: column * COLUMN_WIDTH, y: level * LEVEL_HEIGHT });
-    rowCountByLevel.set(level, column + 1);
-    for (const child of childrenOf.get(nodeId) ?? []) {
+    const children = (childrenOf.get(nodeId) ?? []).filter((child) => !visited.has(child));
+    for (const child of children) {
       place(child, level + 1);
     }
+    const firstChild = children.length > 0 ? positions.get(children[0]) : undefined;
+    const lastChild = children.length > 0 ? positions.get(children[children.length - 1]) : undefined;
+    const x =
+      firstChild && lastChild
+        ? (firstChild.x + lastChild.x) / 2
+        : nextLeafColumn++ * COLUMN_WIDTH;
+    positions.set(nodeId, { x, y: level * LEVEL_HEIGHT });
   }
 
-  // Fall back to treating every node as a root (e.g. an edge-free graph)
-  // rather than producing no layout at all.
-  (roots.length > 0 ? roots : nodes.map((n) => n.id)).forEach((id) => place(id, 0));
-  // Any node unreachable from a root (isolated cycles, disconnected islands)
-  // still needs a deterministic position.
-  nodes.forEach((n) => {
-    if (!visited.has(n.id)) {
-      place(n.id, 0);
+  roots.forEach((id) => place(id, 0));
+  // A cycle has no root. Treat its first unvisited node as a root while the
+  // visited guard keeps traversal finite.
+  nodes.forEach((node) => {
+    if (!visited.has(node.id)) {
+      place(node.id, 0);
     }
   });
 
@@ -69,9 +79,38 @@ export function computeAutoLayout(nodes: RoadmapNode[], edges: RoadmapEdge[]): M
 /** Resolves the effective position for every node: its manual `position` if set, otherwise the auto-layout fallback. */
 export function resolveNodePositions(nodes: RoadmapNode[], edges: RoadmapEdge[]): Map<string, NodePosition> {
   const auto = computeAutoLayout(nodes, edges);
+  const { primaryParent, childrenOf } = buildPrimaryHierarchy(nodes, edges);
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
   const resolved = new Map<string, NodePosition>();
-  for (const node of nodes) {
-    resolved.set(node.id, node.position ?? auto.get(node.id) ?? { x: 0, y: 0 });
+  const visited = new Set<string>();
+
+  function place(nodeId: string, inheritedOffset: NodePosition): void {
+    if (visited.has(nodeId)) {
+      return;
+    }
+    visited.add(nodeId);
+    const node = nodesById.get(nodeId);
+    if (!node) {
+      return;
+    }
+    const automatic = auto.get(nodeId) ?? { x: 0, y: 0 };
+    const position = node.position ?? {
+      x: automatic.x + inheritedOffset.x,
+      y: automatic.y + inheritedOffset.y,
+    };
+    resolved.set(nodeId, position);
+    const descendantOffset = {
+      x: position.x - automatic.x,
+      y: position.y - automatic.y,
+    };
+    for (const child of childrenOf.get(nodeId) ?? []) {
+      place(child, descendantOffset);
+    }
   }
+
+  nodes
+    .filter((node) => !primaryParent.has(node.id))
+    .forEach((node) => place(node.id, { x: 0, y: 0 }));
+  nodes.forEach((node) => place(node.id, { x: 0, y: 0 }));
   return resolved;
 }

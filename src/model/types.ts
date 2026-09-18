@@ -63,6 +63,10 @@ export interface Turn {
   response: string;
   /** Whether the response completed successfully (false for cancelled/errored turns). */
   completed: boolean;
+  /** Existing resume placeholder node this turn was submitted from, when applicable. */
+  resumeNodeId?: string;
+  /** Resume placeholder inherited by later turns in the same chat session. */
+  branchRootNodeId?: string;
   /** Supported references (e.g. files or selections) attached to the request. Matches `TurnRecord.references`. */
   references: TurnReference[];
 }

@@ -185,6 +185,146 @@ describe("SummarizationService", () => {
     assert.strictEqual(outcome.roadmap.nodes.filter((node) => node.nodeType === "question").length, 2);
   });
 
+  it("connects a resumed response beneath its pre-created resume placeholder", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+
+    const existing = await loadDefaultRoadmap(roadmapStore);
+    const now = new Date().toISOString();
+    existing.nodes.push(
+      {
+        id: "node-original",
+        title: "Original topic",
+        summary: "Original",
+        status: "open",
+        nodeType: "topic",
+        tags: [],
+        notes: "",
+        sourceRefs: [{ turnId: "turn-old", sessionId: "session-old" }],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "node-resume",
+        title: "Resume: Original topic",
+        summary: "",
+        status: "open",
+        nodeType: "topic",
+        tags: [],
+        notes: "Explore another path",
+        sourceRefs: [],
+        createdAt: now,
+        updatedAt: now,
+      }
+    );
+    existing.edges.push({
+      id: "edge-resume",
+      source: "node-original",
+      target: "node-resume",
+      kind: "branch",
+      label: "resume",
+    });
+    const document = await roadmapStore.load();
+    await roadmapStore.save({ ...document, roadmaps: [existing] });
+    await turnStore.append({
+      id: "turn-resumed",
+      sessionId: "session-new",
+      timestamp: now,
+      request: "Continue the alternative",
+      response: "Resumed answer",
+      completed: true,
+      resumeNodeId: "node-resume",
+      references: [],
+    });
+
+    let capturedPrompt = "";
+    const service = new SummarizationService(turnStore, roadmapStore, async (prompt) => {
+      capturedPrompt = prompt;
+      const turnId = /Turn id: (\S+)/.exec(prompt)?.[1] ?? "turn-resumed";
+      return JSON.stringify({
+        schemaVersion: 1,
+        nodes: [
+          {
+            localId: `response-${turnId}`,
+            kind: "topic",
+            title: "Alternative response",
+            summary: "Resumed answer",
+            sourceTurnIds: [turnId],
+            relation: "branch",
+            targetNodeId: "node-original",
+          },
+        ],
+      });
+    });
+    const outcome = await service.summarizeNewTurns();
+
+    const responseNode = outcome.roadmap.nodes.find((node) =>
+      node.sourceRefs.some((reference) => reference.turnId === "turn-resumed")
+    );
+    assert.ok(responseNode);
+    assert.strictEqual(responseNode!.id, "node-resume");
+    assert.strictEqual(outcome.roadmap.nodes.length, 2);
+    assert.ok(
+      outcome.roadmap.edges.some(
+        (edge) => edge.source === "node-original" && edge.target === "node-resume"
+      )
+    );
+    assert.ok(capturedPrompt.includes("node-resume"));
+
+    await turnStore.append({
+      id: "turn-follow-up",
+      sessionId: "session-new",
+      timestamp: now,
+      request: "One more question in this resumed path",
+      response: "Another resumed answer",
+      completed: true,
+      references: [],
+    });
+    const followUp = await service.summarizeNewTurns();
+    const followUpNode = followUp.roadmap.nodes.find((node) =>
+      node.sourceRefs.some((reference) => reference.turnId === "turn-follow-up")
+    );
+    assert.ok(followUpNode);
+    assert.ok(
+      followUp.roadmap.edges.some(
+        (edge) => edge.source === "node-resume" && edge.target === followUpNode!.id
+      )
+    );
+    assert.ok(
+      !followUp.roadmap.edges.some(
+        (edge) => edge.source === "node-original" && edge.target === followUpNode!.id
+      )
+    );
+
+    await turnStore.append({
+      id: "turn-third",
+      sessionId: "session-new",
+      timestamp: now,
+      request: "Continue once more in this resumed path",
+      response: "Third resumed answer",
+      completed: true,
+      references: [],
+    });
+    const third = await service.summarizeNewTurns();
+    const thirdNode = third.roadmap.nodes.find((node) =>
+      node.sourceRefs.some((reference) => reference.turnId === "turn-third")
+    );
+    assert.ok(thirdNode);
+    assert.ok(
+      third.roadmap.edges.some(
+        (edge) => edge.source === followUpNode!.id && edge.target === thirdNode!.id
+      )
+    );
+    assert.ok(
+      !third.roadmap.edges.some(
+        (edge) => edge.source === "node-resume" && edge.target === thirdNode!.id
+      )
+    );
+  });
+
   it("clears all graphs permanently while preserving transcripts and allowing future turns", async () => {
     const dir = makeTempDir();
     const turnStore = new TurnStore(dir);

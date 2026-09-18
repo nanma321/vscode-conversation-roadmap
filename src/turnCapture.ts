@@ -105,6 +105,7 @@ export interface BuildTurnRecordInput {
   sessionId: string;
   timestamp: string;
   request: string;
+  resumeNodeId?: string;
   outcome: TurnOutcome;
   references: TurnReference[];
 }
@@ -116,6 +117,7 @@ export function buildTurnRecord(input: BuildTurnRecordInput): TurnRecord {
     sessionId: input.sessionId,
     timestamp: input.timestamp,
     request: input.request,
+    ...(input.resumeNodeId ? { resumeNodeId: input.resumeNodeId } : {}),
     response: input.outcome.responseText,
     completed: input.outcome.completed,
     references: input.references,

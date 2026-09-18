@@ -20,6 +20,7 @@ import {
 } from "./turnCapture";
 import { ROADMAP_MENTION } from "./chatPrefill";
 import { tryPrefillRoadmapChat } from "./vscodeChatPrefill";
+import { parseResumePrompt } from "./resume/resumeContext";
 
 let turnCounter = 0;
 let sessionCounter = 0;
@@ -63,6 +64,7 @@ export function registerRoadmapParticipant(
     const sessionId = resolveSessionId(chatContext);
     const timestamp = new Date().toISOString();
     const references = extractSupportedReferences(request.references);
+    const resumePrompt = parseResumePrompt(request.prompt);
     let responseText = "";
     let outcome: TurnOutcome;
 
@@ -76,7 +78,7 @@ export function registerRoadmapParticipant(
         // an explicit failure, not a silently "completed" empty response.
         outcome = failedOutcome(responseText, new Error("No language model is available"));
       } else {
-        const messages = [vscode.LanguageModelChatMessage.User(request.prompt)];
+        const messages = [vscode.LanguageModelChatMessage.User(resumePrompt.prompt)];
         const chatResponse = await model.sendRequest(messages, {}, token);
         for await (const fragment of chatResponse.text) {
           if (token.isCancellationRequested) {
@@ -100,7 +102,8 @@ export function registerRoadmapParticipant(
           id: turnId,
           sessionId,
           timestamp,
-          request: request.prompt,
+          request: resumePrompt.prompt,
+          resumeNodeId: resumePrompt.resumeNodeId,
           outcome: outcome!,
           references,
         })

@@ -72,6 +72,10 @@ export interface ResumeContextOptions {
 
 export const DEFAULT_MAX_TURNS = 24;
 export const DEFAULT_MAX_CHARS = 12000;
+const RESUME_MARKER_PATTERN =
+  /<!--\s*conversation-roadmap:resume=([A-Za-z0-9._:-]{1,200})\s*-->/;
+const ANY_RESUME_MARKER_PATTERN =
+  /<!--\s*conversation-roadmap:resume=[\s\S]*?-->/g;
 
 /**
  * Collects the selected node plus all of its transitive ancestors (nodes that
@@ -252,7 +256,11 @@ export function buildResumeContext(
  * `@roadmap` messages are accessible). The user's optional follow-up question
  * is appended after the reconstructed context.
  */
-export function formatResumeQuery(context: ResumeContext, question?: string): string {
+export function formatResumeQuery(
+  context: ResumeContext,
+  question?: string,
+  resumeNodeId?: string
+): string {
   const parts: string[] = [`@roadmap Resuming from "${context.sourceNodeTitle}".`, ""];
   if (context.turns.length > 0) {
     parts.push("Prior context:");
@@ -269,5 +277,20 @@ export function formatResumeQuery(context: ResumeContext, question?: string): st
   } else {
     parts.push("Continue from here.");
   }
+  if (resumeNodeId) {
+    parts.push("", `<!-- conversation-roadmap:resume=${resumeNodeId} -->`);
+  }
   return parts.join("\n").trimEnd();
+}
+
+/** Extracts trusted resume metadata and removes every internal marker from the visible/model prompt. */
+export function parseResumePrompt(prompt: string): {
+  prompt: string;
+  resumeNodeId?: string;
+} {
+  const match = RESUME_MARKER_PATTERN.exec(prompt);
+  return {
+    prompt: prompt.replace(ANY_RESUME_MARKER_PATTERN, "").trimEnd(),
+    resumeNodeId: match?.[1],
+  };
 }

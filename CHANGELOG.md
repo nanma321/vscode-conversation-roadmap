@@ -3,6 +3,17 @@
 All notable changes to the "Conversation Roadmap" extension are documented
 in this file.
 
+## [0.1.2] - 2026-09-18
+
+- Fill the single pre-created Resume node with the submitted resumed response
+  instead of creating a redundant second Resume/response node.
+- Keep later turns in the resumed branch as a chain beneath its latest response.
+- Move **Resume from here** near the top of node details as a primary action.
+- Center parents over child subtrees and propagate moved-parent offsets to
+  automatic descendants.
+- Limit graph cards to three visible tags plus a `+N` indicator while keeping
+  every tag available in details, filters, search, and exports.
+
 ## [0.1.1] - 2026-09-18
 
 - Ensure every distinct non-empty participant prompt adds at most one new

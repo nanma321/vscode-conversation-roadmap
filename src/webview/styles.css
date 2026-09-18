@@ -441,6 +441,10 @@ textarea:focus-visible,
   white-space: nowrap;
 }
 
+.tag-overflow {
+  font-weight: 700;
+}
+
 /*
  * Edge styling by `kind` (Phase 6): "topic"/"branch" are AI-generated
  * semantic structure (solid, with "branch" additionally animated by React

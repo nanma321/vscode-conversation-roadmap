@@ -50,7 +50,7 @@ describe("computeAutoLayout", () => {
     assert.ok(positions.get("root")!.y < positions.get("child1")!.y);
   });
 
-  it("does not move existing automatic positions when a sibling is appended", () => {
+  it("keeps the existing child stable and centers its parent when a sibling is appended", () => {
     const initialNodes = [makeNode("root"), makeNode("child1")];
     const initialEdges = [makeEdge("e1", "root", "child1")];
     const initial = computeAutoLayout(initialNodes, initialEdges);
@@ -59,8 +59,39 @@ describe("computeAutoLayout", () => {
       [...initialNodes, makeNode("child2")],
       [...initialEdges, makeEdge("e2", "root", "child2")]
     );
-    assert.deepStrictEqual(expanded.get("root"), initial.get("root"));
     assert.deepStrictEqual(expanded.get("child1"), initial.get("child1"));
+    assert.strictEqual(expanded.get("root")!.x, 120);
+    assert.strictEqual(expanded.get("child2")!.x, 240);
+  });
+
+  it("places a grandchild beneath its own new parent instead of another branch", () => {
+    const nodes = [
+      makeNode("root"),
+      makeNode("old-child"),
+      makeNode("new-parent"),
+      makeNode("new-child"),
+    ];
+    const edges = [
+      makeEdge("e1", "root", "old-child"),
+      makeEdge("e2", "root", "new-parent"),
+      makeEdge("e3", "new-parent", "new-child"),
+    ];
+    const positions = computeAutoLayout(nodes, edges);
+
+    assert.strictEqual(positions.get("new-parent")!.x, positions.get("new-child")!.x);
+    assert.ok(positions.get("new-parent")!.y < positions.get("new-child")!.y);
+    assert.notStrictEqual(positions.get("old-child")!.x, positions.get("new-child")!.x);
+  });
+
+  it("centers a parent over a row of child subtrees", () => {
+    const children = ["a", "b", "c", "d", "e"].map((id) => makeNode(id));
+    const nodes = [makeNode("root"), ...children];
+    const edges = children.map((child, index) => makeEdge(`e${index}`, "root", child.id));
+    const positions = computeAutoLayout(nodes, edges);
+    const childColumns = children.map((child) => positions.get(child.id)!.x);
+
+    assert.deepStrictEqual(childColumns, [0, 240, 480, 720, 960]);
+    assert.strictEqual(positions.get("root")!.x, 480);
   });
 
   it("still places nodes unreachable from any root (e.g. a cycle)", () => {
@@ -92,6 +123,34 @@ describe("resolveNodePositions", () => {
     const auto = computeAutoLayout(nodes, edges);
     const positions = resolveNodePositions(nodes, edges);
     assert.deepStrictEqual(positions.get("b"), auto.get("b"));
+  });
+
+  it("positions a new automatic child relative to its parent's latest manual position", () => {
+    const nodes = [
+      makeNode("parent", { position: { x: 900, y: 300 } }),
+      makeNode("child"),
+    ];
+    const edges = [makeEdge("e1", "parent", "child")];
+    const positions = resolveNodePositions(nodes, edges);
+
+    assert.deepStrictEqual(positions.get("parent"), { x: 900, y: 300 });
+    assert.deepStrictEqual(positions.get("child"), { x: 900, y: 450 });
+  });
+
+  it("preserves a child's own manual position instead of inheriting its parent's offset", () => {
+    const nodes = [
+      makeNode("parent", { position: { x: 900, y: 300 } }),
+      makeNode("child", { position: { x: 120, y: 640 } }),
+      makeNode("grandchild"),
+    ];
+    const edges = [
+      makeEdge("e1", "parent", "child"),
+      makeEdge("e2", "child", "grandchild"),
+    ];
+    const positions = resolveNodePositions(nodes, edges);
+
+    assert.deepStrictEqual(positions.get("child"), { x: 120, y: 640 });
+    assert.deepStrictEqual(positions.get("grandchild"), { x: 120, y: 790 });
   });
 
   it("resolves a position for every node in a roadmap", () => {

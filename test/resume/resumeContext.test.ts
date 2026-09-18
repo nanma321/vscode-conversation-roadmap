@@ -2,6 +2,7 @@ import * as assert from "assert";
 import {
   buildResumeContext,
   formatResumeQuery,
+  parseResumePrompt,
   ResumeSourceTurn,
 } from "../../src/resume/resumeContext";
 import { createDefaultSettings, Roadmap, RoadmapEdge, RoadmapNode } from "../../src/model/types";
@@ -191,5 +192,25 @@ describe("formatResumeQuery", () => {
     const ctx = buildResumeContext(roadmap, "a", turnMap([turn("t1", "q", "a")]));
     const query = formatResumeQuery(ctx);
     assert.ok(query.includes("Continue from here."));
+  });
+
+  it("carries and strips an internal resume placeholder marker", () => {
+    const roadmap = roadmapWith([node("a", "Design", ["t1"])], []);
+    const ctx = buildResumeContext(roadmap, "a", turnMap([turn("t1", "q", "a")]));
+    const query = formatResumeQuery(ctx, "what next?", "node-resume-3");
+    assert.ok(query.includes("<!-- conversation-roadmap:resume=node-resume-3 -->"));
+
+    const parsed = parseResumePrompt(query.replace(/^@roadmap\s+/, ""));
+    assert.strictEqual(parsed.resumeNodeId, "node-resume-3");
+    assert.ok(!parsed.prompt.includes("conversation-roadmap:resume"));
+    assert.ok(parsed.prompt.includes("what next?"));
+  });
+
+  it("strips a malformed resume marker without trusting its node id", () => {
+    const parsed = parseResumePrompt(
+      "Continue here.\n<!-- conversation-roadmap:resume=node id with spaces -->"
+    );
+    assert.strictEqual(parsed.resumeNodeId, undefined);
+    assert.strictEqual(parsed.prompt, "Continue here.");
   });
 });
