@@ -182,3 +182,12 @@ preserved).
   cleans up any orphaned `*.tmp-*` file left behind by a write that was
   interrupted (e.g. a crash) between that temp-file write and the rename,
   without ever touching the real, already-persisted file.
+- **Supported VS Code versions**: `package.json#engines.vscode` declares the
+  minimum supported VS Code version, and `@types/vscode` is pinned to that
+  *exact* same version (not a caret range) so `tsc` can only accept calls to
+  APIs that already exist on the declared minimum - an API only available in
+  a newer VS Code release simply fails to compile. `npm run compile`
+  succeeding is therefore itself the check that the extension's code is
+  compatible with every VS Code version it claims to support, and
+  `test/reliability/vscodeVersionCompatibility.test.ts` guards against the
+  `@types/vscode` pin drifting away from `engines.vscode` again.
