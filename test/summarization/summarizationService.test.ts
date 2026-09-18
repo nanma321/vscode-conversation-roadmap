@@ -57,13 +57,14 @@ describe("SummarizationService", () => {
 
     assert.strictEqual(outcome.changed, true);
     assert.strictEqual(outcome.roadmap.nodes.length, 1);
-    assert.strictEqual(outcome.roadmap.nodes[0].title, "Loops");
-    assert.ok(outcome.roadmap.nodes[0].sourceRefs.some((r) => r.turnId === "turn-1"));
+    const topic = outcome.roadmap.nodes.find((node) => node.title === "Loops");
+    assert.ok(topic);
+    assert.ok(topic!.sourceRefs.some((r) => r.turnId === "turn-1"));
 
     // Persisted to disk: a fresh store instance sees the node.
     const reloaded = await loadDefaultRoadmap(new RoadmapStore(dir));
     assert.strictEqual(reloaded.nodes.length, 1);
-    assert.strictEqual(reloaded.nodes[0].title, "Loops");
+    assert.ok(reloaded.nodes.some((node) => node.title === "Loops"));
   });
 
   it("does not re-summarize a turn already reflected in the roadmap", async () => {
@@ -85,6 +86,103 @@ describe("SummarizationService", () => {
 
     assert.strictEqual(calls, 1, "the model should only be asked about the turn once");
     assert.strictEqual(second.changed, false);
+  });
+
+  it("creates exactly one new node for each distinct same-topic turn", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+
+    let call = 0;
+    const service = new SummarizationService(turnStore, roadmapStore, async (prompt) => {
+      call += 1;
+      const turnId = /Turn id: (\S+)/.exec(prompt)?.[1] ?? "unknown";
+      if (call === 1) {
+        return topicResponse(turnId, "Loops");
+      }
+      const topicId = /- id: (\S+) \| kind: topic/.exec(prompt)?.[1];
+      assert.ok(topicId, "same-session follow-up prompt should include the existing topic");
+      return JSON.stringify({
+        schemaVersion: 1,
+        nodes: [
+          {
+            localId: `continued-${call}`,
+            kind: "topic",
+            title: "ignored continuation title",
+            summary: `updated from ${turnId}`,
+            sourceTurnIds: [turnId],
+            relation: "continue",
+            targetNodeId: topicId,
+          },
+        ],
+      });
+    });
+
+    await seedTurn(turnStore, "turn-1", "What is a loop?");
+    await service.summarizeNewTurns();
+    await seedTurn(turnStore, "turn-2", "How does a loop stop?");
+    await service.summarizeNewTurns();
+    await seedTurn(turnStore, "turn-3", "Can a loop run forever?");
+    const outcome = await service.summarizeNewTurns();
+
+    assert.strictEqual(outcome.roadmap.nodes.filter((node) => node.nodeType === "topic").length, 1);
+    assert.strictEqual(outcome.roadmap.nodes.filter((node) => node.nodeType === "question").length, 2);
+    assert.strictEqual(outcome.roadmap.nodes.length, 3);
+    const topic = outcome.roadmap.nodes.find((node) => node.nodeType === "topic")!;
+    const childQuestionIds = new Set(
+      outcome.roadmap.edges
+        .filter((edge) => edge.source === topic.id)
+        .map((edge) => edge.target)
+    );
+    assert.ok(
+      outcome.roadmap.nodes
+        .filter((node) => node.nodeType === "question")
+        .every((node) => childQuestionIds.has(node.id))
+    );
+  });
+
+  it("backfills distinct questions collapsed into an existing topic without another model call", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurn(turnStore, "turn-1", "What is a loop?");
+    await seedTurn(turnStore, "turn-2", "How does a loop stop?");
+    await seedTurn(turnStore, "turn-3", "Can a loop run forever?");
+
+    const existing = await loadDefaultRoadmap(roadmapStore);
+    existing.nodes.push({
+      id: "topic-1",
+      title: "Loops",
+      summary: "Three questions about loops.",
+      status: "open",
+      nodeType: "topic",
+      tags: ["loops", "iteration"],
+      notes: "",
+      sourceRefs: turnStore.getAll().map((item) => ({
+        turnId: item.id,
+        sessionId: item.sessionId,
+      })),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const document = await roadmapStore.load();
+    await roadmapStore.save({ ...document, roadmaps: [existing] });
+
+    let modelCalled = false;
+    const service = new SummarizationService(turnStore, roadmapStore, async () => {
+      modelCalled = true;
+      throw new Error("model should not be called for backfill");
+    });
+    const outcome = await service.backfillExistingQuestions();
+
+    assert.strictEqual(modelCalled, false);
+    assert.strictEqual(outcome.changed, true);
+    assert.strictEqual(outcome.roadmap.nodes.filter((node) => node.nodeType === "topic").length, 1);
+    assert.strictEqual(outcome.roadmap.nodes.filter((node) => node.nodeType === "question").length, 2);
   });
 
   it("clears all graphs permanently while preserving transcripts and allowing future turns", async () => {
@@ -126,7 +224,12 @@ describe("SummarizationService", () => {
     const outcome = await reloadedService.summarizeNewTurns();
     assert.strictEqual(calls, 1);
     assert.strictEqual(outcome.roadmap.nodes.length, 1);
-    assert.ok(outcome.roadmap.nodes[0].sourceRefs.some((ref) => ref.turnId === "turn-2"));
+    assert.ok(
+      outcome.roadmap.nodes.some(
+        (node) =>
+          node.sourceRefs.some((ref) => ref.turnId === "turn-2")
+      )
+    );
   });
 
   it("serializes clearing after an in-flight summary so late model output cannot restore nodes", async () => {
@@ -265,7 +368,7 @@ describe("SummarizationService", () => {
       return topicResponse(turnId, `Topic ${turnId}`);
     });
 
-    // Session 1: one turn -> one node.
+    // Session 1: one turn -> one topic node.
     await seedTurnInSession(turnStore, "t1", "session-1", "first topic");
     await service.summarizeNewTurns();
 
@@ -276,6 +379,12 @@ describe("SummarizationService", () => {
     const roadmap = await loadDefaultRoadmap(roadmapStore);
     assert.strictEqual(roadmap.nodes.length, 2, "each session should contribute its own node");
     assert.strictEqual(roadmap.edges.length, 0, "there must be no edge linking the two sessions' nodes");
+    const nodesById = new Map(roadmap.nodes.map((node) => [node.id, node]));
+    for (const edge of roadmap.edges) {
+      const sourceSession = nodesById.get(edge.source)?.sourceRefs[0]?.sessionId;
+      const targetSession = nodesById.get(edge.target)?.sourceRefs[0]?.sessionId;
+      assert.strictEqual(sourceSession, targetSession, "an edge must never connect different chat sessions");
+    }
 
     // The prompt used for session 2 must not have shown session 1's node as
     // existing context (otherwise the model could continue/branch onto it).

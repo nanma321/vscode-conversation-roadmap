@@ -2,7 +2,7 @@
   "name": "conversation-roadmap",
   "displayName": "Conversation Roadmap",
   "description": "Captures @roadmap chat participant conversations and renders them as an editable, branching roadmap graph.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "publisher": "conversation-roadmap",
   "license": "MIT",

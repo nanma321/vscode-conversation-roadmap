@@ -31,20 +31,36 @@ describe("computeAutoLayout", () => {
     assert.ok(positions.has("b"));
   });
 
-  it("increases x with depth for a simple chain", () => {
+  it("places each child below its parent for a simple chain", () => {
     const nodes = [makeNode("a"), makeNode("b"), makeNode("c")];
     const edges = [makeEdge("e1", "a", "b"), makeEdge("e2", "b", "c")];
     const positions = computeAutoLayout(nodes, edges);
-    assert.ok(positions.get("a")!.x < positions.get("b")!.x);
-    assert.ok(positions.get("b")!.x < positions.get("c")!.x);
+    assert.strictEqual(positions.get("a")!.x, positions.get("b")!.x);
+    assert.strictEqual(positions.get("b")!.x, positions.get("c")!.x);
+    assert.ok(positions.get("a")!.y < positions.get("b")!.y);
+    assert.ok(positions.get("b")!.y < positions.get("c")!.y);
   });
 
-  it("gives siblings distinct rows at the same depth", () => {
+  it("places siblings left-to-right at the same depth", () => {
     const nodes = [makeNode("root"), makeNode("child1"), makeNode("child2")];
     const edges = [makeEdge("e1", "root", "child1"), makeEdge("e2", "root", "child2")];
     const positions = computeAutoLayout(nodes, edges);
-    assert.strictEqual(positions.get("child1")!.x, positions.get("child2")!.x);
-    assert.notStrictEqual(positions.get("child1")!.y, positions.get("child2")!.y);
+    assert.notStrictEqual(positions.get("child1")!.x, positions.get("child2")!.x);
+    assert.strictEqual(positions.get("child1")!.y, positions.get("child2")!.y);
+    assert.ok(positions.get("root")!.y < positions.get("child1")!.y);
+  });
+
+  it("does not move existing automatic positions when a sibling is appended", () => {
+    const initialNodes = [makeNode("root"), makeNode("child1")];
+    const initialEdges = [makeEdge("e1", "root", "child1")];
+    const initial = computeAutoLayout(initialNodes, initialEdges);
+
+    const expanded = computeAutoLayout(
+      [...initialNodes, makeNode("child2")],
+      [...initialEdges, makeEdge("e2", "root", "child2")]
+    );
+    assert.deepStrictEqual(expanded.get("root"), initial.get("root"));
+    assert.deepStrictEqual(expanded.get("child1"), initial.get("child1"));
   });
 
   it("still places nodes unreachable from any root (e.g. a cycle)", () => {

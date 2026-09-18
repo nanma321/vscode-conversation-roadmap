@@ -26,6 +26,8 @@ import { Roadmap, Turn } from "../model/types";
 import type { TurnStore, TurnRecord } from "../turnStore";
 import { buildSummarizationPrompt } from "./prompt";
 import { summarizeIncrementally, SummarizationResult } from "./applySummary";
+import { buildQuestionBackfill, ensureQuestionNodes } from "./ensureQuestionNodes";
+import { validateModelSummaryResponse } from "./summaryResponseSchema";
 
 /** Signature of the injected model call: takes the prompt, returns the model's raw text response. */
 export type RequestSummary = (prompt: string) => Promise<string>;
@@ -107,6 +109,23 @@ export class SummarizationService {
     return this.queue;
   }
 
+  /** Repairs existing collapsed questions without invoking the language model. */
+  backfillExistingQuestions(): Promise<SummarizeOutcome> {
+    const backfill = async (): Promise<SummarizeOutcome> => {
+      const roadmap = await loadDefaultRoadmap(this.roadmapStore);
+      if (!roadmap.settings.autoSummarize) {
+        return { changed: false, roadmap, errors: [] };
+      }
+      const outcome = this.applyQuestionBackfill(roadmap, this.turnStore.getAll());
+      if (outcome.changed) {
+        await saveRoadmap(this.roadmapStore, outcome.roadmap);
+      }
+      return outcome;
+    };
+    this.queue = this.queue.then(backfill, backfill);
+    return this.queue;
+  }
+
   /**
    * Serializes graph clearing behind any active summarization, preserving raw
    * transcripts while ensuring all turns present at clear time stay excluded
@@ -133,17 +152,22 @@ export class SummarizationService {
       return { changed: false, roadmap, errors: [] };
     }
 
+    const allTurns = this.turnStore.getAll();
+    const backfill = this.applyQuestionBackfill(roadmap, allTurns);
+    let currentRoadmap = backfill.roadmap;
+    let changedAny = backfill.changed;
+    const errors: string[] = [...backfill.errors];
+
     // A turn is "already summarized" if any node already references it; combine
     // that with the in-memory attempted set so we neither re-summarize nor
     // repeatedly retry a turn the model chose not to use.
     const referenced = new Set<string>();
-    for (const node of roadmap.nodes) {
+    for (const node of currentRoadmap.nodes) {
       for (const ref of node.sourceRefs) {
         referenced.add(ref.turnId);
       }
     }
 
-    const allTurns = this.turnStore.getAll();
     const pending = allTurns.filter(
       (t) =>
         t.completed &&
@@ -152,7 +176,10 @@ export class SummarizationService {
         !this.attemptedTurnIds.has(t.id)
     );
     if (pending.length === 0) {
-      return { changed: false, roadmap, errors: [] };
+      if (changedAny) {
+        await saveRoadmap(this.roadmapStore, currentRoadmap);
+      }
+      return { changed: changedAny, roadmap: currentRoadmap, errors };
     }
 
     // Mark attempted up front so a failure or a model no-op doesn't cause this
@@ -166,10 +193,6 @@ export class SummarizationService {
     // its own sub-graph instead of the model linking (continuing/branching) the
     // new turns onto an unrelated earlier session's nodes. Changes still apply
     // to the full roadmap, so other sessions' nodes are preserved.
-    let currentRoadmap = roadmap;
-    let changedAny = false;
-    const errors: string[] = [];
-
     for (const sessionId of this.orderedSessionIds(pending)) {
       const sessionTurns = pending.filter((t) => t.sessionId === sessionId).map(toTurn);
       const scopedRoadmap = sessionScopedRoadmap(currentRoadmap, sessionId);
@@ -189,7 +212,21 @@ export class SummarizationService {
         continue;
       }
 
-      const result: SummarizationResult = summarizeIncrementally(currentRoadmap, parsed, sessionTurns);
+      const validation = validateModelSummaryResponse(
+        parsed,
+        new Set(sessionTurns.map((turn) => turn.id))
+      );
+      if (!validation.valid || !validation.value) {
+        errors.push(...validation.errors);
+        continue;
+      }
+      const response = ensureQuestionNodes(
+        validation.value,
+        sessionTurns,
+        scopedRoadmap,
+        allTurns.map(toTurn)
+      );
+      const result: SummarizationResult = summarizeIncrementally(currentRoadmap, response, sessionTurns);
       if (result.changed) {
         currentRoadmap = result.roadmap;
         changedAny = true;
@@ -204,6 +241,42 @@ export class SummarizationService {
 
     await saveRoadmap(this.roadmapStore, currentRoadmap);
     return { changed: true, roadmap: currentRoadmap, errors };
+  }
+
+  private applyQuestionBackfill(
+    roadmap: Roadmap,
+    allTurns: TurnRecord[]
+  ): SummarizeOutcome {
+    const allDomainTurns = allTurns
+      .filter((turn) => turn.completed && !turn.roadmapExcluded)
+      .map(toTurn);
+    let currentRoadmap = roadmap;
+    let changed = false;
+    const errors: string[] = [];
+
+    for (const sessionId of this.orderedSessionIds(
+      allTurns.filter((turn) => turn.completed && !turn.roadmapExcluded)
+    )) {
+      const sessionTurns = allDomainTurns.filter((turn) => turn.sessionId === sessionId);
+      const scopedRoadmap = sessionScopedRoadmap(currentRoadmap, sessionId);
+      const backfill = buildQuestionBackfill(scopedRoadmap, sessionTurns, allDomainTurns);
+      if (backfill.turns.length === 0) {
+        continue;
+      }
+      const result = summarizeIncrementally(
+        currentRoadmap,
+        backfill.response,
+        backfill.turns
+      );
+      if (result.changed) {
+        currentRoadmap = result.roadmap;
+        changed = true;
+      } else {
+        errors.push(...result.errors);
+      }
+    }
+
+    return { changed, roadmap: currentRoadmap, errors };
   }
 
   /** The distinct session ids present in `turns`, in first-appearance order. */

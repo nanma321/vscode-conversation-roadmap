@@ -3,6 +3,19 @@
 All notable changes to the "Conversation Roadmap" extension are documented
 in this file.
 
+## [0.1.1] - 2026-09-18
+
+- Ensure every distinct non-empty participant prompt adds at most one new
+  roadmap node instead of disappearing into a topic or creating a redundant
+  topic/question pair.
+- Backfill previously collapsed same-topic prompts into child request nodes
+  when the graph is opened, without another model call.
+- Keep node cards fixed-width and truncate overflowing tag labels.
+- Switch automatic graph layout to stable top-down placement, with children
+  below parents and siblings left-to-right.
+- Bring the newest node batch into view without repeatedly recentering after
+  ordinary edits.
+
 ## [0.1.0] - 2026-09-18
 
 - Added Webview accessibility improvements: full React type-checking, modal

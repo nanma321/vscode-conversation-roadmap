@@ -65,7 +65,8 @@ ${renderTurns(turns)}
 Instructions:
 - Be conservative: prefer relation "continue" on the most relevant existing node over creating a new node. Only create a new node ("topic" or "branch") when the turns introduce a genuinely new subject.
 - Use relation "topic" for a new node that sequentially follows the current topic, and relation "branch" only when the turns clearly return to or fork off an earlier, different topic (targetNodeId must be that earlier node's id).
-- In addition to topic nodes, extract distinct "decision", "question", "task", "outcome", and "blocker" items mentioned in the turns as their own nodes (kind set accordingly), each related via "topic" or "continue" to the relevant topic node.
+- In addition to topic nodes, extract distinct "decision", "question", "task", "outcome", and "blocker" items mentioned in the turns as their own nodes (kind set accordingly), each related to the relevant topic node.
+- Every distinct non-empty user request MUST be represented by at least one newly created node, even when written as an imperative prompt. If the request creates a new topic, decision, task, outcome, blocker, or question node, do not add a redundant question node for the same request. Never represent a new distinct request solely by continuing an existing node.
 - Every node you produce MUST include at least one id from "sourceTurnIds", chosen only from the turn ids listed above. Do not invent turn ids.
 - Do not remove or alter information the user has authored themselves; only propose additions and updates derived from these turns.
 - Respond with ONLY a single JSON object (no markdown code fences, no commentary) matching exactly this shape:

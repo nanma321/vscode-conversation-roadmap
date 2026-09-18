@@ -61,6 +61,12 @@ describe("buildSummarizationPrompt", () => {
     assert.ok(prompt.toLowerCase().includes("sourceturnids"));
   });
 
+  it("requires a distinct question node even when its topic continues", () => {
+    const prompt = buildSummarizationPrompt([makeTurn()], makeEmptyRoadmap());
+    assert.match(prompt, /Every distinct non-empty user request MUST be represented by at least one newly created node/);
+    assert.match(prompt, /do not add a redundant question node/);
+  });
+
   it("describes the exact JSON response shape expected, including schemaVersion 1", () => {
     const prompt = buildSummarizationPrompt([makeTurn({ id: "turn-f" })], undefined);
     assert.ok(prompt.includes('"schemaVersion": 1'));

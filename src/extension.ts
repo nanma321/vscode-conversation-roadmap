@@ -111,6 +111,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // Reload from disk each time the command runs so the graph reflects
       // turns captured in prior sessions, confirming reload behavior.
       await store.load();
+      await summarizer.backfillExistingQuestions();
       await showGraphWebview(context, store, roadmapStore, () => summarizer.clearAllRoadmaps());
     }
   );

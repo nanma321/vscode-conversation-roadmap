@@ -73,6 +73,37 @@ function FitOnLoad(): null {
   return null;
 }
 
+function FocusNewestNodes(props: { nodeIds: string[] }): null {
+  const { nodeIds } = props;
+  const { fitView, getNode } = useReactFlow();
+  const nodeKey = [...nodeIds].sort().join("|");
+
+  React.useEffect(() => {
+    if (!nodeKey) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      const newestNodes = nodeKey
+        .split("|")
+        .map((id) => getNode(id))
+        .filter((node): node is Node => Boolean(node));
+      if (newestNodes.length === 0) {
+        return;
+      }
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      void fitView({
+        nodes: newestNodes,
+        padding: 0.8,
+        maxZoom: 1.15,
+        duration: reduceMotion ? 0 : 300,
+      });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [fitView, getNode, nodeKey]);
+
+  return null;
+}
+
 export function GraphView(props: {
   roadmap: Roadmap;
   selectedNodeId: string | null;
@@ -94,6 +125,10 @@ export function GraphView(props: {
   }, [roadmap, selectedNodeId, matchedNodeIds]);
 
   const edges = React.useMemo(() => toFlowEdges(roadmap, selectedEdgeId), [roadmap, selectedEdgeId]);
+  const newestNodeIds = React.useMemo(
+    () => roadmap.nodes.filter((node) => node.isNew).map((node) => node.id),
+    [roadmap.nodes]
+  );
 
   const handleNodesChange = React.useCallback((changes: NodeChange[]) => {
     setNodes((current) => applyNodeChanges(changes, current));
@@ -158,6 +193,7 @@ export function GraphView(props: {
           <Controls />
           <MiniMap pannable zoomable />
           <FitOnLoad />
+          <FocusNewestNodes nodeIds={newestNodeIds} />
         </ReactFlow>
       </ReactFlowProvider>
     </div>

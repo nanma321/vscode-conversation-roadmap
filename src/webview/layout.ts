@@ -4,8 +4,8 @@
  * Manual positions (`RoadmapNode.position`) always win - per the Key
  * Engineering Principle that user-authored graph changes are never
  * overwritten automatically, this module only ever computes a position for
- * a node that has none yet. Nodes are placed left-to-right by BFS depth
- * from root nodes (nodes with no incoming edge), and top-to-bottom within a
+ * a node that has none yet. Nodes are placed top-to-bottom by graph depth
+ * from root nodes (nodes with no incoming edge), and left-to-right within a
  * depth level in the order they're first reached, giving a stable,
  * deterministic layout for a given node/edge set.
  *
@@ -15,8 +15,8 @@
  */
 import { NodePosition, RoadmapEdge, RoadmapNode } from "../model/types";
 
-const LEVEL_WIDTH = 260;
-const ROW_HEIGHT = 120;
+const COLUMN_WIDTH = 260;
+const LEVEL_HEIGHT = 150;
 
 /** Computes a deterministic fallback position for every node, ignoring any manual `position` already set. */
 export function computeAutoLayout(nodes: RoadmapNode[], edges: RoadmapEdge[]): Map<string, NodePosition> {
@@ -44,9 +44,9 @@ export function computeAutoLayout(nodes: RoadmapNode[], edges: RoadmapEdge[]): M
       return;
     }
     visited.add(nodeId);
-    const row = rowCountByLevel.get(level) ?? 0;
-    positions.set(nodeId, { x: level * LEVEL_WIDTH, y: row * ROW_HEIGHT });
-    rowCountByLevel.set(level, row + 1);
+    const column = rowCountByLevel.get(level) ?? 0;
+    positions.set(nodeId, { x: column * COLUMN_WIDTH, y: level * LEVEL_HEIGHT });
+    rowCountByLevel.set(level, column + 1);
     for (const child of childrenOf.get(nodeId) ?? []) {
       place(child, level + 1);
     }
