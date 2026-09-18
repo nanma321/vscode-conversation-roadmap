@@ -14,6 +14,7 @@ import { NODE_STATUSES, NODE_TYPES, NodeStatus, NodeType, Roadmap, RoadmapNode }
 import type { TurnRecord } from "../turnStore";
 import { Markdown } from "./Markdown";
 import { NODE_COLOR_SWATCHES } from "./nodeColor";
+import { resolveNodePositions } from "./layout";
 
 export function NodeDetailsPanel(props: {
   node: RoadmapNode | null;
@@ -26,6 +27,8 @@ export function NodeDetailsPanel(props: {
   onUpdateTags: (tags: string[]) => void;
   onUpdateColor: (color: string | null) => void;
   onToggleHighlight: (highlighted: boolean) => void;
+  onMoveNode: (position: { x: number; y: number }) => void;
+  onAddConnection: (targetNodeId: string) => void;
   onMergeInto: (targetNodeId: string) => void;
   onSplit: (title: string, sourceRefTurnIds: string[]) => void;
   onResume: () => void;
@@ -41,6 +44,8 @@ export function NodeDetailsPanel(props: {
     onUpdateTags,
     onUpdateColor,
     onToggleHighlight,
+    onMoveNode,
+    onAddConnection,
     onMergeInto,
     onSplit,
     onResume,
@@ -49,6 +54,7 @@ export function NodeDetailsPanel(props: {
   const [notesDraft, setNotesDraft] = React.useState(node?.notes ?? "");
   const [tagsDraft, setTagsDraft] = React.useState((node?.tags ?? []).join(", "));
   const [mergeTargetId, setMergeTargetId] = React.useState("");
+  const [connectionTargetId, setConnectionTargetId] = React.useState("");
   const [splitTitle, setSplitTitle] = React.useState("");
   const [splitTurnIds, setSplitTurnIds] = React.useState<Set<string>>(new Set());
 
@@ -57,6 +63,7 @@ export function NodeDetailsPanel(props: {
     setNotesDraft(node?.notes ?? "");
     setTagsDraft((node?.tags ?? []).join(", "));
     setMergeTargetId("");
+    setConnectionTargetId("");
     setSplitTitle("");
     setSplitTurnIds(new Set());
   }, [node?.id]);
@@ -71,6 +78,9 @@ export function NodeDetailsPanel(props: {
 
   const turns = node.sourceRefs.map((ref) => turnsById.get(ref.turnId)).filter((t): t is TurnRecord => Boolean(t));
   const otherNodes = roadmap.nodes.filter((n) => n.id !== node.id);
+  const currentPosition = resolveNodePositions(roadmap.nodes, roadmap.edges).get(node.id) ?? { x: 0, y: 0 };
+  const nudge = (x: number, y: number): void =>
+    onMoveNode({ x: currentPosition.x + x, y: currentPosition.y + y });
 
   function toggleSplitTurn(turnId: string): void {
     setSplitTurnIds((current) => {
@@ -208,6 +218,53 @@ export function NodeDetailsPanel(props: {
           Resume from here&hellip;
         </button>
         <p className="resume-hint">Starts a new branch from this node without changing the original path.</p>
+      </div>
+
+      <div className="field structural-edit">
+        <span id="node-position-label">Move node</span>
+        <div role="group" aria-labelledby="node-position-label" className="nudge-controls">
+          <button type="button" className="nudge-up" aria-label="Move node up" onClick={() => nudge(0, -40)}>
+            &uarr;
+          </button>
+          <button type="button" className="nudge-left" aria-label="Move node left" onClick={() => nudge(-40, 0)}>
+            &larr;
+          </button>
+          <button type="button" className="nudge-right" aria-label="Move node right" onClick={() => nudge(40, 0)}>
+            &rarr;
+          </button>
+          <button type="button" className="nudge-down" aria-label="Move node down" onClick={() => nudge(0, 40)}>
+            &darr;
+          </button>
+        </div>
+        <p className="field-hint">Moves the node by 40 pixels without requiring drag and drop.</p>
+      </div>
+
+      <div className="field structural-edit">
+        <span id="node-connect-label">Add connection from this node</span>
+        <div role="group" aria-labelledby="node-connect-label" className="merge-controls">
+          <select
+            aria-label="Connection target node"
+            value={connectionTargetId}
+            onChange={(event) => setConnectionTargetId(event.target.value)}
+          >
+            <option value="">Select a target node&hellip;</option>
+            {otherNodes.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.title || "(untitled)"}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!connectionTargetId}
+            onClick={() => {
+              onAddConnection(connectionTargetId);
+              setConnectionTargetId("");
+            }}
+          >
+            Add connection
+          </button>
+        </div>
       </div>
 
       <div className="field structural-edit">

@@ -7,6 +7,23 @@ html, body, #root {
   margin: 0;
 }
 
+.react-flow__edge-text {
+  fill: var(--vscode-foreground, #1f1f1f);
+}
+
+.react-flow__edge-textbg {
+  fill: var(--vscode-editor-background, #ffffff);
+  fill-opacity: 1;
+}
+
+.react-flow__attribution {
+  background: var(--vscode-editor-background, #ffffff) !important;
+}
+
+.react-flow__attribution a {
+  color: var(--vscode-textLink-foreground, #005fb8) !important;
+}
+
 body {
   font-family: var(--vscode-font-family, sans-serif);
   color: var(--vscode-foreground);
@@ -112,9 +129,13 @@ textarea:focus-visible,
   min-width: 0;
 }
 
-.outline-view {
+.outline-container {
   flex: 1;
   overflow: auto;
+  min-width: 0;
+}
+
+.outline-view {
   list-style: none;
   margin: 0;
   padding: 0.5rem;
@@ -141,10 +162,45 @@ textarea:focus-visible,
   font-weight: bold;
 }
 
+.outline-connections {
+  border-top: 1px solid var(--vscode-panel-border, #888);
+  padding: 0.5rem;
+}
+
+.outline-connections h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.outline-connections ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.outline-edge-item {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.outline-edge-item.selected {
+  background: var(--vscode-list-activeSelectionBackground, #094771);
+  color: var(--vscode-list-activeSelectionForeground, #ffffff);
+  border-color: var(--roadmap-active-border);
+}
+
 .details-panel {
+  position: relative;
+  z-index: 5;
   width: 320px;
   flex-shrink: 0;
   overflow-y: auto;
+  background: var(--vscode-editor-background, #ffffff);
   border-left: 1px solid var(--vscode-panel-border, #888);
   padding: 0.75rem;
   box-sizing: border-box;
@@ -239,6 +295,38 @@ textarea:focus-visible,
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+.nudge-controls {
+  display: grid;
+  grid-template-areas:
+    ". up ."
+    "left . right"
+    ". down .";
+  grid-template-columns: repeat(3, 2rem);
+  gap: 0.2rem;
+  justify-content: center;
+}
+
+.nudge-controls button {
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
+.nudge-up {
+  grid-area: up;
+}
+
+.nudge-left {
+  grid-area: left;
+}
+
+.nudge-right {
+  grid-area: right;
+}
+
+.nudge-down {
+  grid-area: down;
 }
 
 .split-turn-list {
@@ -648,6 +736,21 @@ textarea:focus-visible,
   .tag-filters,
   .display-filters {
     flex: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .react-flow__edge.animated path {
+    animation: none !important;
   }
 }
 

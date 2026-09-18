@@ -5,6 +5,11 @@ in this file.
 
 ## [Unreleased] - Phase 10: Release Preparation
 
+- Added Webview accessibility improvements: full React type-checking, modal
+  focus management, inert dialog backgrounds, screen-reader relationship
+  descriptions, keyboard-accessible connection editing and node movement,
+  main landmarks, and reduced-motion support. - Phase 10: Release Preparation
+
 - Added a one-time onboarding notice (`Roadmap: Show Onboarding and Known
   Limitations` command) that explains the participant-only history
   limitation - only messages explicitly addressed to `@roadmap` can be

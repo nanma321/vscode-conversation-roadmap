@@ -125,6 +125,10 @@ Then press F5 in VS Code to launch an Extension Development Host, open
 the Chat view, and address a message to `@roadmap`. Run the
 **Roadmap: Open Graph** command to view the captured turns as a graph.
 
+See [Accessibility](docs/ACCESSIBILITY.md) for supported keyboard and
+assistive-technology behavior, automated axe-core results, and remaining
+manual release checks.
+
 ## Tests
 
 ```

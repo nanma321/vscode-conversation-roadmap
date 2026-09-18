@@ -24,6 +24,7 @@ import "reactflow/dist/style.css";
 import { Roadmap, RoadmapNode } from "../model/types";
 import { resolveNodePositions } from "./layout";
 import { RoadmapFlowNode, RoadmapFlowNodeData } from "./RoadmapFlowNode";
+import { describeRoadmapNode } from "./accessibility";
 
 const NODE_TYPES: NodeTypes = { roadmapNode: RoadmapFlowNode };
 
@@ -32,6 +33,7 @@ function toFlowNodes(roadmap: Roadmap, selectedNodeId: string | null, matchedNod
   return roadmap.nodes.map((node) => ({
     id: node.id,
     type: "roadmapNode",
+    ariaLabel: describeRoadmapNode(roadmap, node),
     position: positions.get(node.id) ?? { x: 0, y: 0 },
     data: { node, selected: node.id === selectedNodeId, dimmed: !matchedNodeIds.has(node.id) },
   }));

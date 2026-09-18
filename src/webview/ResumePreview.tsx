@@ -14,6 +14,7 @@ import * as React from "react";
 import { Roadmap, RoadmapNode } from "../model/types";
 import type { TurnRecord } from "../turnStore";
 import { buildResumeContext, ResumeSourceTurn } from "../resume/resumeContext";
+import { useModalFocus } from "./useModalFocus";
 
 export function ResumePreview(props: {
   node: RoadmapNode;
@@ -24,6 +25,7 @@ export function ResumePreview(props: {
 }): React.JSX.Element {
   const { node, roadmap, turnsById, onSend, onCancel } = props;
   const [question, setQuestion] = React.useState("");
+  const dialogRef = useModalFocus<HTMLDivElement>(onCancel);
 
   const context = React.useMemo(
     () => buildResumeContext(roadmap, node.id, turnsById as ReadonlyMap<string, ResumeSourceTurn>),
@@ -34,12 +36,14 @@ export function ResumePreview(props: {
     <div className="resume-backdrop" role="presentation" onClick={onCancel}>
       <div
         className="resume-modal"
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-label={`Resume from ${node.title}`}
+        aria-labelledby="resume-dialog-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2>Resume from &ldquo;{node.title}&rdquo;</h2>
+        <h2 id="resume-dialog-title">Resume from &ldquo;{node.title}&rdquo;</h2>
         <p className="resume-explainer">
           This starts a <strong>new branch</strong> seeded with the context below. Your original conversation and
           roadmap path are <strong>not modified</strong>.

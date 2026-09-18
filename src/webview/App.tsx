@@ -171,10 +171,12 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
   // counts reflect what the user is actually looking at.
   const searchMatches = searchRoadmap(visibleRoadmap, turns, searchQuery, searchFilters);
   const matchedNodeIds = new Set(searchMatches.map((m) => m.nodeId));
+  const modalOpen = Boolean(resumeNode || (mergeSource && mergeTarget));
 
   return (
-    <div className="app">
-      <div className="toolbar" role="toolbar" aria-label="Graph view controls">
+    <>
+      <div className="app" inert={modalOpen ? true : undefined} aria-hidden={modalOpen || undefined}>
+        <div className="toolbar" role="toolbar" aria-label="Graph view controls">
         <button
           type="button"
           aria-pressed={viewMode === "graph"}
@@ -257,30 +259,30 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
         <button type="button" onClick={handleRedo} disabled={!canRedo} aria-label="Redo last undone change">
           Redo
         </button>
-      </div>
-
-      {errorMessage ? (
-        <div role="alert" className="error-banner">
-          {errorMessage}
-          <button type="button" onClick={() => setErrorMessage(null)} aria-label="Dismiss error">
-            &times;
-          </button>
         </div>
-      ) : null}
 
-      {viewMode === "transcript" || !searchExpanded ? null : (
-        <SearchBar
-          query={searchQuery}
-          onQueryChange={setSearchQuery}
-          filters={searchFilters}
-          onFiltersChange={setSearchFilters}
-          availableTags={availableTags}
-          matchCount={matchedNodeIds.size}
-          totalCount={visibleRoadmap.nodes.length}
-        />
-      )}
+        {errorMessage ? (
+          <div role="alert" className="error-banner">
+            {errorMessage}
+            <button type="button" onClick={() => setErrorMessage(null)} aria-label="Dismiss error">
+              &times;
+            </button>
+          </div>
+        ) : null}
 
-      <div className="main">
+        {viewMode === "transcript" || !searchExpanded ? null : (
+          <SearchBar
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            filters={searchFilters}
+            onFiltersChange={setSearchFilters}
+            availableTags={availableTags}
+            matchCount={matchedNodeIds.size}
+            totalCount={visibleRoadmap.nodes.length}
+          />
+        )}
+
+        <main id="roadmap-main" className="main">
         {viewMode === "transcript" ? (
           <SessionTranscriptView turns={turns} />
         ) : visibleRoadmap.nodes.length === 0 ? (
@@ -306,7 +308,14 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
             onSelectEdge={handleSelectEdge}
           />
         ) : (
-          <OutlineView roadmap={visibleRoadmap} selectedNodeId={selectedNodeId} matchedNodeIds={matchedNodeIds} onSelectNode={handleSelectNode} />
+          <OutlineView
+            roadmap={visibleRoadmap}
+            selectedNodeId={selectedNodeId}
+            selectedEdgeId={selectedEdgeId}
+            matchedNodeIds={matchedNodeIds}
+            onSelectNode={handleSelectNode}
+            onSelectEdge={handleSelectEdge}
+          />
         )}
 
         {viewMode === "transcript" ? null : (
@@ -337,6 +346,12 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
               onToggleHighlight={(highlighted) =>
                 selectedNodeId && post({ type: "toggleHighlight", nodeId: selectedNodeId, highlighted })
               }
+              onMoveNode={(position) =>
+                selectedNodeId && handleMoveNode(selectedNodeId, position)
+              }
+              onAddConnection={(targetNodeId) =>
+                selectedNodeId && handleAddEdge(selectedNodeId, targetNodeId)
+              }
               onMergeInto={(targetNodeId) =>
                 selectedNodeId && setMergeRequest({ sourceNodeId: selectedNodeId, targetNodeId })
               }
@@ -345,6 +360,7 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
             />
           )
         )}
+        </main>
       </div>
 
       {resumeNode ? (
@@ -373,6 +389,6 @@ export function App(props: { vscode: VsCodeApi; initialState: InitialState }): R
           onCancel={() => setMergeRequest(null)}
         />
       ) : null}
-    </div>
+    </>
   );
 }

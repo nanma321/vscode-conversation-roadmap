@@ -1,5 +1,6 @@
 import * as React from "react";
 import { RoadmapNode } from "../model/types";
+import { useModalFocus } from "./useModalFocus";
 
 export function MergePreview(props: {
   source: RoadmapNode;
@@ -10,14 +11,23 @@ export function MergePreview(props: {
   const { source, target, onConfirm, onCancel } = props;
   const [titleSource, setTitleSource] = React.useState<"target" | "source">("target");
   const retainedTitle = titleSource === "target" ? target.title : source.title;
+  const dialogRef = useModalFocus<HTMLDivElement>(onCancel);
   const combinedTags = Array.from(new Set([...target.tags, ...source.tags]));
   const combinedTurnCount = new Set(
     [...target.sourceRefs, ...source.sourceRefs].map((ref) => `${ref.sessionId}:${ref.turnId}`)
   ).size;
 
   return (
-    <div className="modal-backdrop" role="presentation">
-      <div className="merge-modal" role="dialog" aria-modal="true" aria-labelledby="merge-preview-title">
+    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
+      <div
+        className="merge-modal"
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="merge-preview-title"
+        onClick={(event) => event.stopPropagation()}
+      >
         <h2 id="merge-preview-title">Review merge</h2>
         <p>
           <strong>{source.title}</strong> will be removed and folded into <strong>{target.title}</strong>.

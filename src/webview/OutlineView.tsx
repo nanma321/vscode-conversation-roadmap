@@ -8,15 +8,18 @@
 import * as React from "react";
 import { Roadmap } from "../model/types";
 import { buildRoadmapOutline } from "../model/outline";
+import { describeRoadmapNode } from "./accessibility";
 
 export function OutlineView(props: {
   roadmap: Roadmap;
   selectedNodeId: string | null;
+  selectedEdgeId: string | null;
   /** Ids of nodes currently matching the search query/filters (Phase 8); unmatched nodes render dimmed rather than being hidden, preserving the outline's tree structure. */
   matchedNodeIds: ReadonlySet<string>;
   onSelectNode: (nodeId: string | null) => void;
+  onSelectEdge: (edgeId: string) => void;
 }): React.JSX.Element {
-  const { roadmap, selectedNodeId, matchedNodeIds, onSelectNode } = props;
+  const { roadmap, selectedNodeId, selectedEdgeId, matchedNodeIds, onSelectNode, onSelectEdge } = props;
   const entries = React.useMemo(() => buildRoadmapOutline(roadmap), [roadmap]);
   const itemRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -46,32 +49,58 @@ export function OutlineView(props: {
   }
 
   return (
-    <ul className="outline-view" role="tree" aria-label="Roadmap outline">
-      {entries.map((entry, index) => (
-        <li key={entry.node.id} role="none">
-          <button
-            ref={(el) => {
-              itemRefs.current[index] = el;
-            }}
-            role="treeitem"
-            aria-selected={entry.node.id === selectedNodeId}
-            aria-level={entry.depth + 1}
-            className={
-              "outline-item" +
-              (entry.node.id === selectedNodeId ? " selected" : "") +
-              (entry.node.highlighted ? " highlighted" : "") +
-              (matchedNodeIds.has(entry.node.id) ? "" : " dimmed")
-            }
-            style={{ paddingLeft: `${entry.depth * 1.25 + 0.5}rem`, borderLeftColor: entry.node.color }}
-            onClick={() => onSelectNode(entry.node.id)}
-            onKeyDown={(e) => handleKeyDown(e, index)}
-          >
-            <span className={"badge status-" + entry.node.status}>{entry.node.status}</span>{" "}
-            {entry.node.isNew ? <span className="badge new-outline-badge">New</span> : null}{" "}
-            {entry.node.title || "(untitled)"}
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="outline-container">
+      <ul className="outline-view" role="tree" aria-label="Roadmap nodes">
+        {entries.map((entry, index) => (
+          <li key={entry.node.id} role="none">
+            <button
+              ref={(el) => {
+                itemRefs.current[index] = el;
+              }}
+              role="treeitem"
+              aria-selected={entry.node.id === selectedNodeId}
+              aria-level={entry.depth + 1}
+              aria-label={describeRoadmapNode(roadmap, entry.node)}
+              className={
+                "outline-item" +
+                (entry.node.id === selectedNodeId ? " selected" : "") +
+                (entry.node.highlighted ? " highlighted" : "") +
+                (matchedNodeIds.has(entry.node.id) ? "" : " dimmed")
+              }
+              style={{ paddingLeft: `${entry.depth * 1.25 + 0.5}rem`, borderLeftColor: entry.node.color }}
+              onClick={() => onSelectNode(entry.node.id)}
+              onKeyDown={(e) => handleKeyDown(e, index)}
+            >
+              <span className={"badge status-" + entry.node.status}>{entry.node.status}</span>{" "}
+              {entry.node.isNew ? <span className="badge new-outline-badge">New</span> : null}{" "}
+              {entry.node.title || "(untitled)"}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {roadmap.edges.length > 0 ? (
+        <section className="outline-connections" aria-labelledby="outline-connections-title">
+          <h2 id="outline-connections-title">Connections</h2>
+          <ul>
+            {roadmap.edges.map((edge) => {
+              const source = roadmap.nodes.find((node) => node.id === edge.source)?.title ?? edge.source;
+              const target = roadmap.nodes.find((node) => node.id === edge.target)?.title ?? edge.target;
+              return (
+                <li key={edge.id}>
+                  <button
+                    type="button"
+                    aria-pressed={edge.id === selectedEdgeId}
+                    className={"outline-edge-item" + (edge.id === selectedEdgeId ? " selected" : "")}
+                    onClick={() => onSelectEdge(edge.id)}
+                  >
+                    {source} to {target} ({edge.kind})
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+    </div>
   );
 }
