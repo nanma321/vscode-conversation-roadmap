@@ -53,6 +53,17 @@ exposes.
 Run **Roadmap: Delete All Local Data**. This permanently deletes every
 captured turn and roadmap graph after a confirmation. It cannot be undone.
 
+## Exporting a roadmap
+
+- Use **Roadmap: Export Roadmap (JSON)** for a complete backup that can be
+  imported later.
+- Use **Roadmap: Export Graph + Outline (Markdown)** for a Mermaid flowchart
+  and readable outline. The Markdown viewer must support Mermaid to render the
+  diagram; the outline remains readable when it does not.
+- Use **Roadmap: Export Visual Graph (SVG)** for a standalone vector image.
+  SVG preserves the effective node layout and can be opened in a browser or
+  inserted into documents.
+
 ## Installing the packaged extension (VSIX)
 
 1. `npm install`

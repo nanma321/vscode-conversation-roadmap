@@ -9,6 +9,8 @@ in this file.
   focus management, inert dialog backgrounds, screen-reader relationship
   descriptions, keyboard-accessible connection editing and node movement,
   main landmarks, and reduced-motion support. - Phase 10: Release Preparation
+- Added Mermaid graph output to Markdown exports and a standalone accessible
+  SVG graph export command. - Phase 10: Release Preparation
 
 - Added a one-time onboarding notice (`Roadmap: Show Onboarding and Known
   Limitations` command) that explains the participant-only history

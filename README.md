@@ -129,6 +129,17 @@ See [Accessibility](docs/ACCESSIBILITY.md) for supported keyboard and
 assistive-technology behavior, automated axe-core results, and remaining
 manual release checks.
 
+## Exporting
+
+- **Roadmap: Export Roadmap (JSON)** writes the complete versioned data model
+  for backup or later import.
+- **Roadmap: Export Graph + Outline (Markdown)** writes a Mermaid flowchart
+  followed by a readable nested outline containing status, type, tags,
+  summaries, and notes.
+- **Roadmap: Export Visual Graph (SVG)** writes a standalone vector image using
+  saved node positions, colors, types, statuses, labels, and connections. The
+  SVG includes a title and description for assistive technologies.
+
 ## Tests
 
 ```

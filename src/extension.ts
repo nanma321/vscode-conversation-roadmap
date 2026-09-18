@@ -10,7 +10,12 @@ import {
   updateGraph,
   resumeSelectedNode,
 } from "./webviewPanel";
-import { exportMarkdownOutlineCommand, exportRoadmapCommand, importRoadmapCommand } from "./importExportCommands";
+import {
+  exportMarkdownOutlineCommand,
+  exportRoadmapCommand,
+  exportSvgCommand,
+  importRoadmapCommand,
+} from "./importExportCommands";
 import { deleteAllDataCommand } from "./dataDeletion";
 import { RequestSummary, SummarizationService } from "./summarization/summarizationService";
 import { maybeShowOnboarding } from "./onboarding";
@@ -137,6 +142,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   );
   context.subscriptions.push(exportMarkdownOutlineCmd);
+
+  const exportSvgCmd = vscode.commands.registerCommand(
+    "conversationRoadmap.exportSvg",
+    async () => {
+      await exportSvgCommand(roadmapStore);
+    }
+  );
+  context.subscriptions.push(exportSvgCmd);
 
   // Phase 9: user-initiated, irreversible local data deletion (turns + roadmap graphs).
   const deleteAllDataCmd = vscode.commands.registerCommand(

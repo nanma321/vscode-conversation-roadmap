@@ -74,9 +74,15 @@
       },
       {
         "command": "conversationRoadmap.exportMarkdownOutline",
-        "title": "Roadmap: Export Outline (Markdown)",
+        "title": "Roadmap: Export Graph + Outline (Markdown)",
         "category": "Conversation Roadmap",
         "icon": "$(markdown)"
+      },
+      {
+        "command": "conversationRoadmap.exportSvg",
+        "title": "Roadmap: Export Visual Graph (SVG)",
+        "category": "Conversation Roadmap",
+        "icon": "$(file-media)"
       },
       {
         "command": "conversationRoadmap.deleteAllData",

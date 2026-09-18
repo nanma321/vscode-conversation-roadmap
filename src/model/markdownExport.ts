@@ -28,15 +28,63 @@ function formatNodeLine(node: RoadmapNode): string {
   return parts.join(" ");
 }
 
+function escapeMermaidText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\|/g, "&#124;")
+    .replace(/`/g, "&#96;")
+    .replace(/\r?\n/g, " ");
+}
+
+/** Produces a Mermaid flowchart using generated aliases so persisted ids/text cannot alter Mermaid syntax. */
+export function exportRoadmapToMermaid(roadmap: Roadmap): string {
+  if (roadmap.nodes.length === 0) {
+    return "_No graph nodes yet._";
+  }
+
+  const aliases = new Map(roadmap.nodes.map((node, index) => [node.id, `n${index}`]));
+  const lines = ["```mermaid", "flowchart LR"];
+  for (const node of roadmap.nodes) {
+    const alias = aliases.get(node.id)!;
+    const title = escapeMermaidText(node.title || "(untitled)");
+    const metadata = escapeMermaidText(`${node.nodeType ?? "topic"} · ${node.status}`);
+    lines.push(`  ${alias}["${title}<br/>${metadata}"]`);
+  }
+  for (const edge of roadmap.edges) {
+    const source = aliases.get(edge.source);
+    const target = aliases.get(edge.target);
+    if (!source || !target) {
+      continue;
+    }
+    const label = escapeMermaidText(edge.label ? `${edge.kind}: ${edge.label}` : edge.kind);
+    const connector = edge.kind === "branch" ? "-.->" : "-->";
+    lines.push(`  ${source} ${connector}|${label}| ${target}`);
+  }
+  lines.push("```");
+  return lines.join("\n");
+}
+
 /**
- * Renders `roadmap` as a Markdown document: a top-level heading with the
- * roadmap's title, followed by one nested bullet per node (indented two
- * spaces per depth level, matching the outline view's nesting), each
- * showing the node's type, status, tags, summary, and notes when present.
+ * Renders `roadmap` as a Markdown document containing a Mermaid graph and a
+ * readable nested outline. The outline uses one bullet per node (indented
+ * two spaces per depth level) and includes type, status, tags, summary, and
+ * notes when present.
  */
 export function exportRoadmapToMarkdown(roadmap: Roadmap): string {
   const entries = buildRoadmapOutline(roadmap);
-  const lines: string[] = [`# ${escapeMarkdown(roadmap.title || "Roadmap")}`, ""];
+  const lines: string[] = [
+    `# ${escapeMarkdown(roadmap.title || "Roadmap")}`,
+    "",
+    "## Graph",
+    "",
+    exportRoadmapToMermaid(roadmap),
+    "",
+    "## Outline",
+    "",
+  ];
 
   if (entries.length === 0) {
     lines.push("_No nodes yet._");

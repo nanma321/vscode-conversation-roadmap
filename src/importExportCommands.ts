@@ -10,6 +10,7 @@ import * as vscode from "vscode";
 import { RoadmapStore } from "./model/roadmapStore";
 import { exportRoadmapDocument, parseImportPayload, planImport } from "./model/exportImport";
 import { exportRoadmapToMarkdown } from "./model/markdownExport";
+import { exportRoadmapToSvg } from "./export/svgExport";
 
 /** "Roadmap: Export Roadmap (JSON)" - writes the full, currently persisted document to a user-chosen `.json` file. */
 export async function exportRoadmapCommand(roadmapStore: RoadmapStore): Promise<void> {
@@ -76,7 +77,7 @@ export async function importRoadmapCommand(roadmapStore: RoadmapStore): Promise<
   }
 }
 
-/** "Roadmap: Export Outline (Markdown)" - writes the default roadmap's outline to a user-chosen `.md` file. */
+/** "Roadmap: Export Graph + Outline (Markdown)" - writes Mermaid plus a readable outline to a `.md` file. */
 export async function exportMarkdownOutlineCommand(roadmapStore: RoadmapStore): Promise<void> {
   const document = await roadmapStore.load();
   const roadmap = document.roadmaps[0];
@@ -86,13 +87,33 @@ export async function exportMarkdownOutlineCommand(roadmapStore: RoadmapStore): 
   }
   const uri = await vscode.window.showSaveDialog({
     filters: { "Markdown": ["md"] },
-    saveLabel: "Export Outline",
-    defaultUri: vscode.Uri.file("roadmap-outline.md"),
+    saveLabel: "Export Markdown",
+    defaultUri: vscode.Uri.file("roadmap.md"),
   });
   if (!uri) {
     return;
   }
   const contents = exportRoadmapToMarkdown(roadmap);
   await vscode.workspace.fs.writeFile(uri, Buffer.from(contents, "utf8"));
-  void vscode.window.showInformationMessage(`Roadmap outline exported to ${uri.fsPath}`);
+  void vscode.window.showInformationMessage(`Roadmap Markdown exported to ${uri.fsPath}`);
+}
+
+/** "Roadmap: Export Visual Graph (SVG)" - writes a standalone vector rendering of the default roadmap. */
+export async function exportSvgCommand(roadmapStore: RoadmapStore): Promise<void> {
+  const document = await roadmapStore.load();
+  const roadmap = document.roadmaps[0];
+  if (!roadmap) {
+    void vscode.window.showInformationMessage("No roadmap to export yet.");
+    return;
+  }
+  const uri = await vscode.window.showSaveDialog({
+    filters: { "SVG": ["svg"] },
+    saveLabel: "Export SVG",
+    defaultUri: vscode.Uri.file("roadmap.svg"),
+  });
+  if (!uri) {
+    return;
+  }
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(exportRoadmapToSvg(roadmap), "utf8"));
+  void vscode.window.showInformationMessage(`Roadmap SVG exported to ${uri.fsPath}`);
 }
