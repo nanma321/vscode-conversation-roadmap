@@ -47,8 +47,15 @@ describe("VS Code version compatibility (Phase 9)", () => {
     const enginesVersion = bareVersion(pkg.engines!.vscode!);
     const typesVersion = pkg.devDependencies?.["@types/vscode"];
     assert.ok(typesVersion, "package.json devDependencies must include @types/vscode");
+    assert.ok(
+      !/^[\^~]/.test(typesVersion!),
+      `@types/vscode must be an exact version (no ^ or ~ range prefix), but was "${typesVersion}" - ` +
+        "a caret/tilde range would let npm install install a newer typings package than the declared minimum"
+    );
+    // Compare the raw (un-stripped) @types/vscode string against the bare engines.vscode
+    // version, since @types/vscode itself must never carry a range prefix (asserted above).
     assert.strictEqual(
-      bareVersion(typesVersion!),
+      typesVersion,
       enginesVersion,
       "@types/vscode must be pinned to the same version as engines.vscode - a newer typings package " +
         "would let tsc silently accept APIs that do not exist on the declared minimum supported VS Code version"
