@@ -3,20 +3,24 @@
 All notable changes to the "Conversation Roadmap" extension are documented
 in this file.
 
-## [Unreleased] - Phase 10: Release Preparation
+## [0.1.0] - 2026-09-18
 
 - Added Webview accessibility improvements: full React type-checking, modal
   focus management, inert dialog backgrounds, screen-reader relationship
   descriptions, keyboard-accessible connection editing and node movement,
-  main landmarks, and reduced-motion support. - Phase 10: Release Preparation
+  main landmarks, and reduced-motion support.
 - Added Mermaid graph output to Markdown exports and a standalone accessible
-  SVG graph export command. - Phase 10: Release Preparation
+  SVG graph export command.
 - Added a synthetic-data hackathon demo as an animated GIF and a 76-second
-  captioned, text-to-speech narrated video with a readable transcript. - Phase 10: Release Preparation
+  captioned, text-to-speech narrated video with a readable transcript.
 - Published the completed ten-phase implementation plan and formal
-  accessibility assessment with raw axe-core results. - Phase 10: Release Preparation
-
-- Added a one-time onboarding notice (`Roadmap: Show Onboarding and Known
+  accessibility assessment with raw axe-core results.
+- Automatically prepares `@roadmap` as a non-submitting partial query after
+  each participant response, with a setting and Command Palette fallback.
+- Simplified Command Palette titles so the Conversation Roadmap category
+  appears exactly once.
+- Increased default graph connection thickness for readability.
+- Added a one-time onboarding notice (`Conversation Roadmap: Show Onboarding and Known
   Limitations` command) that explains the participant-only history
   limitation - only messages explicitly addressed to `@roadmap` can be
   captured - before first use. Can be disabled via the

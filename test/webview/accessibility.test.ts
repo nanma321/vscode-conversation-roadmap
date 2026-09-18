@@ -61,5 +61,6 @@ describe("Webview accessibility", () => {
     assert.match(css, /:focus-visible/);
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
     assert.match(css, /\.react-flow__edge\.animated path/);
+    assert.match(css, /\.roadmap-edge \.react-flow__edge-path\s*\{[^}]*stroke-width:\s*2\.5/s);
   });
 });

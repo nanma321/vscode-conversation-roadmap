@@ -1,5 +1,9 @@
 # Troubleshooting & Known Limitations
 
+Conversation Roadmap 0.1.0 requires VS Code 1.137 or later. Older versions are
+blocked at installation because their non-submitting chat-prefill behavior is
+not compatible with this release.
+
 ## Known limitation: only `@roadmap` turns are captured
 
 Conversation Roadmap registers a chat participant (`@roadmap`) using VS

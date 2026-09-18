@@ -129,6 +129,8 @@ that node:
 
 ## Running
 
+Requires VS Code 1.137 or later.
+
 ```
 npm install
 npm run compile

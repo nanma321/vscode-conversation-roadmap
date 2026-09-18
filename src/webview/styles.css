@@ -448,6 +448,10 @@ textarea:focus-visible,
   stroke: var(--vscode-charts-orange, #e2a336);
 }
 
+.roadmap-edge .react-flow__edge-path {
+  stroke-width: 2.5;
+}
+
 .roadmap-edge.selected .react-flow__edge-path {
   stroke: var(--roadmap-active-border);
   stroke-width: 4;
