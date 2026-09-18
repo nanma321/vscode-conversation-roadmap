@@ -10,6 +10,13 @@ Markdown, or SVG.
 > `@roadmap`. The extension cannot read ordinary Copilot chat history or turns
 > sent to other participants.
 
+## Demo
+
+![Animated Conversation Roadmap demo showing graph, node details, filters, resume preview, and accessible outline](docs/media/conversation-roadmap-demo.gif)
+
+[Watch the 76-second narrated demo](docs/media/conversation-roadmap-demo.mp4)
+· [Read the demo transcript](docs/media/DEMO_SCRIPT.md)
+
 ## Features
 
 - A `@roadmap` chat participant can be registered and only receives
