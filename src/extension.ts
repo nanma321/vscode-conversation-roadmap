@@ -13,6 +13,7 @@ import {
 import { exportMarkdownOutlineCommand, exportRoadmapCommand, importRoadmapCommand } from "./importExportCommands";
 import { deleteAllDataCommand } from "./dataDeletion";
 import { RequestSummary, SummarizationService } from "./summarization/summarizationService";
+import { maybeShowOnboarding } from "./onboarding";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Register synchronously before any startup work. The webview stores a small
@@ -145,6 +146,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   );
   context.subscriptions.push(deleteAllDataCmd);
+
+  // Phase 10: lets a user reopen the onboarding notice on demand, e.g. after
+  // dismissing the first-run notice or to re-check the participant-only
+  // history limitation before inviting a beta tester.
+  const showOnboardingCmd = vscode.commands.registerCommand(
+    "conversationRoadmap.showOnboarding",
+    async () => {
+      await maybeShowOnboarding(context, /* force */ true);
+    }
+  );
+  context.subscriptions.push(showOnboardingCmd);
+
+  // Phase 10 exit criterion: known limitations (participant-only history)
+  // are visible before first use. Shown at most once per install unless the
+  // user explicitly reopens it via the command above, and can be disabled
+  // entirely via the `conversationRoadmap.showOnboarding` setting.
+  void maybeShowOnboarding(context);
 }
 
 export function deactivate(): void {

@@ -90,6 +90,30 @@ that node:
   `sourceRefs` is not possible through public APIs until the user sends the
   message and a later summarization pass runs.
 
+## Release preparation (Phase 10)
+
+- **Onboarding**: the first time the extension activates, an information
+  message explains the Phase 1 limitation that only messages explicitly
+  addressed to `@roadmap` can ever be captured (VS Code's `vscode.chat` API
+  exposes a participant's handler only to requests sent to it, never to
+  other participants' or unscoped chat history). Reopen it any time with
+  **Roadmap: Show Onboarding and Known Limitations**, or disable it via the
+  `conversationRoadmap.showOnboarding` setting. See
+  `docs/TROUBLESHOOTING.md` for this and other known limitations.
+- **Marketplace metadata**: `package.json` declares a publisher, license,
+  repository, keywords, gallery banner, and extension icon
+  (`media/icon.png`); every contributed command has a category and icon.
+- **Packaging**: `npm run package` builds a `.vsix` with `@vscode/vsce`
+  (via `npx`, so it is not an added project dependency). Install it into a
+  clean profile with `code --profile "Roadmap Clean Test"` followed by
+  **Install from VSIX...** (or `code --install-extension <file>.vsix`) to
+  confirm it activates without relying on any other locally installed
+  extension or workspace state; see `docs/TROUBLESHOOTING.md` for the full
+  steps.
+- **Documentation**: user-facing troubleshooting and known limitations live
+  in `docs/TROUBLESHOOTING.md`; `CHANGELOG.md` tracks release-notable
+  changes.
+
 ## Running
 
 ```
@@ -118,7 +142,11 @@ de-duplication and size caps, and branch node/edge creation that leaves the
 original path unchanged. `test/reliability/` (Phase 9) covers the Webview's
 Content-Security-Policy string and incremental summarization at scale (500
 turns applied in small batches, verifying compaction and provenance are
-preserved).
+preserved). `test/onboarding.test.ts` (Phase 10) covers the onboarding
+notice's wording and show/hide decision, and
+`test/reliability/marketplaceMetadata.test.ts` (Phase 10) covers
+`package.json`'s Marketplace metadata, command categories/icons, and
+settings.
 
 ## Security, privacy, and reliability (Phase 9)
 

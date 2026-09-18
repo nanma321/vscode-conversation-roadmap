@@ -1,14 +1,36 @@
 {
   "name": "conversation-roadmap",
   "displayName": "Conversation Roadmap",
-  "description": "Captures @roadmap chat participant conversations and renders them as a graph.",
+  "description": "Captures @roadmap chat participant conversations and renders them as an editable, branching roadmap graph.",
   "version": "0.0.1",
   "private": true,
+  "publisher": "conversation-roadmap",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/conversation-roadmap/conversation-roadmap"
+  },
+  "bugs": {
+    "url": "https://github.com/conversation-roadmap/conversation-roadmap/issues"
+  },
+  "keywords": [
+    "chat",
+    "roadmap",
+    "graph",
+    "conversation",
+    "copilot"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Visualization"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -21,36 +43,64 @@
         "id": "roadmap.participant",
         "name": "roadmap",
         "fullName": "Roadmap",
-        "description": "Captures conversation turns for the roadmap graph.",
+        "description": "Captures conversation turns for the roadmap graph. Only messages sent to @roadmap can be captured.",
         "isSticky": true
       }
     ],
     "commands": [
       {
         "command": "conversationRoadmap.openGraph",
-        "title": "Roadmap: Open Graph"
+        "title": "Roadmap: Open Graph",
+        "category": "Conversation Roadmap",
+        "icon": "$(type-hierarchy)"
       },
       {
         "command": "conversationRoadmap.resumeFromNode",
-        "title": "Conversation Roadmap: Resume from Selected Node"
+        "title": "Conversation Roadmap: Resume from Selected Node",
+        "category": "Conversation Roadmap",
+        "icon": "$(git-branch)"
       },
       {
         "command": "conversationRoadmap.exportRoadmap",
-        "title": "Roadmap: Export Roadmap (JSON)"
+        "title": "Roadmap: Export Roadmap (JSON)",
+        "category": "Conversation Roadmap",
+        "icon": "$(export)"
       },
       {
         "command": "conversationRoadmap.importRoadmap",
-        "title": "Roadmap: Import Roadmap (JSON)"
+        "title": "Roadmap: Import Roadmap (JSON)",
+        "category": "Conversation Roadmap",
+        "icon": "$(cloud-download)"
       },
       {
         "command": "conversationRoadmap.exportMarkdownOutline",
-        "title": "Roadmap: Export Outline (Markdown)"
+        "title": "Roadmap: Export Outline (Markdown)",
+        "category": "Conversation Roadmap",
+        "icon": "$(markdown)"
       },
       {
         "command": "conversationRoadmap.deleteAllData",
-        "title": "Roadmap: Delete All Local Data"
+        "title": "Roadmap: Delete All Local Data",
+        "category": "Conversation Roadmap",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "conversationRoadmap.showOnboarding",
+        "title": "Roadmap: Show Onboarding and Known Limitations",
+        "category": "Conversation Roadmap",
+        "icon": "$(info)"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Conversation Roadmap",
+      "properties": {
+        "conversationRoadmap.showOnboarding": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a one-time onboarding notice explaining that Conversation Roadmap can only capture messages explicitly sent to @roadmap (VS Code's chat API never exposes turns sent to other participants or unscoped chat)."
+        }
+      }
+    }
   },
   "scripts": {
     "compile": "tsc -p ./ && node esbuild.js",
@@ -58,7 +108,8 @@
     "watch": "tsc -watch -p ./",
     "watch:webview": "node esbuild.js --watch",
     "pretest": "npm run compile",
-    "test": "ts-mocha -p ./tsconfig.json test/**/*.test.ts --timeout 10000"
+    "test": "ts-mocha -p ./tsconfig.json test/**/*.test.ts --timeout 10000",
+    "package": "npx --yes @vscode/vsce package"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.6",
