@@ -13,6 +13,8 @@ in this file.
   SVG graph export command. - Phase 10: Release Preparation
 - Added a synthetic-data hackathon demo as an animated GIF and a 76-second
   captioned, text-to-speech narrated video with a readable transcript. - Phase 10: Release Preparation
+- Published the completed ten-phase implementation plan and formal
+  accessibility assessment with raw axe-core results. - Phase 10: Release Preparation
 
 - Added a one-time onboarding notice (`Roadmap: Show Onboarding and Known
   Limitations` command) that explains the participant-only history

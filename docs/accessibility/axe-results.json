@@ -1,0 +1,169 @@
+{
+  "tags": [
+    "wcag2a",
+    "wcag2aa",
+    "wcag21a",
+    "wcag21aa",
+    "wcag22a",
+    "wcag22aa"
+  ],
+  "iframes": [],
+  "states": {
+    "graph": {
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "help": "Elements must meet minimum color contrast ratio thresholds",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast?application=axeAPI",
+          "nodes": [
+            {
+              "target": [
+                "text"
+              ],
+              "html": "<text class=\"react-flow__edge-text\" y=\"6.75\" dy=\"0.3em\">next</text>",
+              "failureSummary": "Fix any of the following:\n  Element's background color could not be determined because it is overlapped by another element"
+            }
+          ]
+        }
+      ],
+      "violationCount": 0,
+      "passCount": 26,
+      "incompleteCount": 1
+    },
+    "graph-node-details": {
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "help": "Elements must meet minimum color contrast ratio thresholds",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast?application=axeAPI",
+          "nodes": [
+            {
+              "target": [
+                "text"
+              ],
+              "html": "<text class=\"react-flow__edge-text\" y=\"6.75\" dy=\"0.3em\">next</text>",
+              "failureSummary": "Fix any of the following:\n  Element's background color could not be determined because it is overlapped by another element"
+            },
+            {
+              "target": [
+                "#node-notes"
+              ],
+              "html": "<textarea id=\"node-notes\" aria-describedby=\"node-notes-hint\" rows=\"4\">Verify all interactive controls.</textarea>",
+              "failureSummary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                ".nudge-up"
+              ],
+              "html": "<button type=\"button\" class=\"nudge-up\" aria-label=\"Move node up\">↑</button>",
+              "failureSummary": "Fix any of the following:\n  Element content contains only non-text characters"
+            },
+            {
+              "target": [
+                ".nudge-left"
+              ],
+              "html": "<button type=\"button\" class=\"nudge-left\" aria-label=\"Move node left\">←</button>",
+              "failureSummary": "Fix any of the following:\n  Element content contains only non-text characters"
+            },
+            {
+              "target": [
+                ".nudge-right"
+              ],
+              "html": "<button type=\"button\" class=\"nudge-right\" aria-label=\"Move node right\">→</button>",
+              "failureSummary": "Fix any of the following:\n  Element content contains only non-text characters"
+            },
+            {
+              "target": [
+                ".nudge-down"
+              ],
+              "html": "<button type=\"button\" class=\"nudge-down\" aria-label=\"Move node down\">↓</button>",
+              "failureSummary": "Fix any of the following:\n  Element content contains only non-text characters"
+            }
+          ]
+        }
+      ],
+      "violationCount": 0,
+      "passCount": 28,
+      "incompleteCount": 1
+    },
+    "resume-dialog": {
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "help": "Elements must meet minimum color contrast ratio thresholds",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast?application=axeAPI",
+          "nodes": [
+            {
+              "target": [
+                "#resume-context-preview"
+              ],
+              "html": "<textarea id=\"resume-context-preview\" class=\"resume-context-preview\" readonly=\"\" rows=\"12\">",
+              "failureSummary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            },
+            {
+              "target": [
+                "#resume-question"
+              ],
+              "html": "<textarea id=\"resume-question\" class=\"resume-question\" placeholder=\"What would you like to ask from this point?\" rows=\"3\"></textarea>",
+              "failureSummary": "Fix any of the following:\n  Element's background color could not be determined because it's partially obscured by another element"
+            }
+          ]
+        }
+      ],
+      "violationCount": 0,
+      "passCount": 22,
+      "incompleteCount": 1
+    },
+    "merge-dialog": {
+      "violations": [],
+      "incomplete": [],
+      "violationCount": 0,
+      "passCount": 24,
+      "incompleteCount": 0
+    },
+    "graph-edge-details": {
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "help": "Elements must meet minimum color contrast ratio thresholds",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast?application=axeAPI",
+          "nodes": [
+            {
+              "target": [
+                "text"
+              ],
+              "html": "<text class=\"react-flow__edge-text\" y=\"6.75\" dy=\"0.3em\">next</text>",
+              "failureSummary": "Fix any of the following:\n  Element's background color could not be determined because it is overlapped by another element"
+            }
+          ]
+        }
+      ],
+      "violationCount": 0,
+      "passCount": 27,
+      "incompleteCount": 1
+    },
+    "outline": {
+      "violations": [],
+      "incomplete": [],
+      "violationCount": 0,
+      "passCount": 27,
+      "incompleteCount": 0
+    },
+    "transcript": {
+      "violations": [],
+      "incomplete": [],
+      "violationCount": 0,
+      "passCount": 22,
+      "incompleteCount": 0
+    }
+  },
+  "stateErrors": {}
+}
