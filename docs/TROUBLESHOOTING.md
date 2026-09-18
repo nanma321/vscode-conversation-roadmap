@@ -17,13 +17,28 @@ Practically, this means:
 - If you want a turn on the roadmap, address it to `@roadmap` directly.
 
 This is shown as a one-time onboarding notice the first time the extension
-activates (see **Roadmap: Show Onboarding and Known Limitations** to reopen
+activates (see **Conversation Roadmap: Show Onboarding and Known Limitations** to reopen
 it), and it is not a bug - it is the boundary of what the public chat API
 exposes.
 
+## `@roadmap` disappears before my next question
+
+The extension requests sticky-participant behavior with `isSticky: true`, but
+some VS Code chat surfaces or versions can still remove the participant chip
+after a response. Once the chip is gone, an unscoped follow-up is routed to
+default Copilot and is not exposed to this extension.
+
+By default, the extension uses partial-query mode after every Roadmap response
+to prepare `@roadmap ` in the chat input without sending it. Disable this with
+`conversationRoadmap.autoPrefillMention` if you prefer manual selection.
+
+The **Conversation Roadmap: Continue with @roadmap** Command Palette action repeats the
+prefill on demand. If VS Code's chat prefill command is unavailable, the action
+copies the mention to the clipboard and explains the fallback.
+
 ## The graph looks empty after opening it
 
-- Run **Roadmap: Open Graph** again; it always reloads from disk.
+- Run **Conversation Roadmap: Open Graph** again; it always reloads from disk.
 - Confirm you have addressed at least one message to `@roadmap` in this
   workspace - see the limitation above.
 - Check the **Session transcript** view (in the graph panel) to confirm
@@ -50,17 +65,17 @@ exposes.
 
 ## I want to remove everything the extension has stored
 
-Run **Roadmap: Delete All Local Data**. This permanently deletes every
+Run **Conversation Roadmap: Delete All Local Data**. This permanently deletes every
 captured turn and roadmap graph after a confirmation. It cannot be undone.
 
 ## Exporting a roadmap
 
-- Use **Roadmap: Export Roadmap (JSON)** for a complete backup that can be
+- Use **Conversation Roadmap: Export Roadmap (JSON)** for a complete backup that can be
   imported later.
-- Use **Roadmap: Export Graph + Outline (Markdown)** for a Mermaid flowchart
+- Use **Conversation Roadmap: Export Graph + Outline (Markdown)** for a Mermaid flowchart
   and readable outline. The Markdown viewer must support Mermaid to render the
   diagram; the outline remains readable when it does not.
-- Use **Roadmap: Export Visual Graph (SVG)** for a standalone vector image.
+- Use **Conversation Roadmap: Export Visual Graph (SVG)** for a standalone vector image.
   SVG preserves the effective node layout and can be opened in a browser or
   inserted into documents.
 
@@ -72,7 +87,7 @@ captured turn and roadmap graph after a confirmation. It cannot be undone.
 4. In VS Code: Extensions view -> `...` menu -> **Install from VSIX...**,
    or `code --install-extension conversation-roadmap-<version>.vsix`.
 5. Reload the window. Address a message to `@roadmap` in the Chat view,
-   then run **Roadmap: Open Graph**.
+   then run **Conversation Roadmap: Open Graph**.
 
 To verify in a clean environment (no other settings/extensions carried
 over), launch VS Code with a fresh profile before installing:

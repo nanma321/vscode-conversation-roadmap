@@ -10,7 +10,8 @@ export function getOnboardingMessage(): string {
     "Conversation Roadmap turns your chats with @roadmap into an editable graph. " +
     "Known limitation: only messages explicitly addressed to @roadmap can be captured - " +
     "VS Code's chat API never exposes turns sent to other participants or to unscoped chat, " +
-    "so history from before you start using @roadmap, or from other participants, will not appear on the roadmap."
+    "so history from before you start using @roadmap, or from other participants, will not appear on the roadmap. " +
+    "If automatic prefill is unavailable, run Conversation Roadmap: Continue with @roadmap before your next question."
   );
 }
 

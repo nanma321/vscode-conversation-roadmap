@@ -18,6 +18,8 @@ import {
   successOutcome,
   TurnOutcome,
 } from "./turnCapture";
+import { ROADMAP_MENTION } from "./chatPrefill";
+import { tryPrefillRoadmapChat } from "./vscodeChatPrefill";
 
 let turnCounter = 0;
 let sessionCounter = 0;
@@ -103,6 +105,21 @@ export function registerRoadmapParticipant(
           references,
         })
       );
+      if (!token.isCancellationRequested) {
+        const autoPrefill = vscode.workspace
+          .getConfiguration("conversationRoadmap")
+          .get<boolean>("autoPrefillMention", true);
+        if (autoPrefill) {
+          setTimeout(() => {
+            void tryPrefillRoadmapChat(ROADMAP_MENTION).catch((error) => {
+              const message = error instanceof Error ? error.message : String(error);
+              void vscode.window.showWarningMessage(
+                `Conversation Roadmap could not prepare the next chat input: ${message}`
+              );
+            });
+          }, 200);
+        }
+      }
     }
   };
 

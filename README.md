@@ -59,13 +59,13 @@ Markdown, or SVG.
   everything by default and only allows scripts tied to a per-load nonce;
   `style-src` additionally allows `'unsafe-inline'` so React can apply
   inline styles (color swatches, outline indentation).
-- Storage survives a reload: the "Roadmap: Open Graph" command re-reads
+- Storage survives a reload: the "Conversation Roadmap: Open Graph" command re-reads
   `turns.json` from disk every time it runs, so turns captured in a prior
   session are still shown after a restart.
 - The Roadmap Graph opts out of editor restoration. If VS Code tries to revive
   a graph from its saved window layout, the extension's webview serializer
   closes that tab instead. This does not delete captured turns or graph data;
-  run "Roadmap: Open Graph" to reopen it.
+  run "Conversation Roadmap: Open Graph" to reopen it.
 
 ## Resume from a Node (Phase 7)
 
@@ -110,7 +110,7 @@ that node:
   addressed to `@roadmap` can ever be captured (VS Code's `vscode.chat` API
   exposes a participant's handler only to requests sent to it, never to
   other participants' or unscoped chat history). Reopen it any time with
-  **Roadmap: Show Onboarding and Known Limitations**, or disable it via the
+  **Conversation Roadmap: Show Onboarding and Known Limitations**, or disable it via the
   `conversationRoadmap.showOnboarding` setting. See
   `docs/TROUBLESHOOTING.md` for this and other known limitations.
 - **Marketplace metadata**: `package.json` declares a publisher, license,
@@ -136,7 +136,7 @@ npm run compile
 
 Then press F5 in VS Code to launch an Extension Development Host, open
 the Chat view, and address a message to `@roadmap`. Run the
-**Roadmap: Open Graph** command to view the captured turns as a graph.
+**Conversation Roadmap: Open Graph** command to view the captured turns as a graph.
 
 ## Project documentation
 
@@ -147,12 +147,12 @@ the Chat view, and address a message to `@roadmap`. Run the
 
 ## Exporting
 
-- **Roadmap: Export Roadmap (JSON)** writes the complete versioned data model
+- **Conversation Roadmap: Export Roadmap (JSON)** writes the complete versioned data model
   for backup or later import.
-- **Roadmap: Export Graph + Outline (Markdown)** writes a Mermaid flowchart
+- **Conversation Roadmap: Export Graph + Outline (Markdown)** writes a Mermaid flowchart
   followed by a readable nested outline containing status, type, tags,
   summaries, and notes.
-- **Roadmap: Export Visual Graph (SVG)** writes a standalone vector image using
+- **Conversation Roadmap: Export Visual Graph (SVG)** writes a standalone vector image using
   saved node positions, colors, types, statuses, labels, and connections. The
   SVG includes a title and description for assistive technologies.
 
@@ -192,7 +192,7 @@ settings.
   or unrecognized messages are rejected without changing the roadmap. Messages
   the host sends *to* the Webview are not user input and carry only roadmap
   data the extension itself produced.
-- **Local data deletion**: the **Roadmap: Delete All Local Data** command
+- **Local data deletion**: the **Conversation Roadmap: Delete All Local Data** command
   (`src/dataDeletion.ts`) permanently erases every captured turn and
   roadmap graph after an explicit, modal confirmation, and refreshes any
   open graph panel to reflect the now-empty state.

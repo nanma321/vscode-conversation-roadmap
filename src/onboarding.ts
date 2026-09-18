@@ -33,7 +33,7 @@ export const LEARN_MORE_ACTION = "Learn More";
 /**
  * Shows the onboarding notice once per install (tracked in `globalState`),
  * unless the user disabled it via `conversationRoadmap.showOnboarding`.
- * Reused by the "Roadmap: Show Onboarding" command to let a user reopen it
+ * Reused by the "Conversation Roadmap: Show Onboarding" command to let a user reopen it
  * on demand, in which case `force` bypasses the "already shown" check.
  */
 export async function maybeShowOnboarding(

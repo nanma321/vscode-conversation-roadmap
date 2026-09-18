@@ -50,49 +50,55 @@
     "commands": [
       {
         "command": "conversationRoadmap.openGraph",
-        "title": "Roadmap: Open Graph",
+        "title": "Open Graph",
         "category": "Conversation Roadmap",
         "icon": "$(type-hierarchy)"
       },
       {
+        "command": "conversationRoadmap.continueChat",
+        "title": "Continue with @roadmap",
+        "category": "Conversation Roadmap",
+        "icon": "$(arrow-right)"
+      },
+      {
         "command": "conversationRoadmap.resumeFromNode",
-        "title": "Conversation Roadmap: Resume from Selected Node",
+        "title": "Resume from Selected Node",
         "category": "Conversation Roadmap",
         "icon": "$(git-branch)"
       },
       {
         "command": "conversationRoadmap.exportRoadmap",
-        "title": "Roadmap: Export Roadmap (JSON)",
+        "title": "Export Roadmap (JSON)",
         "category": "Conversation Roadmap",
         "icon": "$(export)"
       },
       {
         "command": "conversationRoadmap.importRoadmap",
-        "title": "Roadmap: Import Roadmap (JSON)",
+        "title": "Import Roadmap (JSON)",
         "category": "Conversation Roadmap",
         "icon": "$(cloud-download)"
       },
       {
         "command": "conversationRoadmap.exportMarkdownOutline",
-        "title": "Roadmap: Export Graph + Outline (Markdown)",
+        "title": "Export Graph + Outline (Markdown)",
         "category": "Conversation Roadmap",
         "icon": "$(markdown)"
       },
       {
         "command": "conversationRoadmap.exportSvg",
-        "title": "Roadmap: Export Visual Graph (SVG)",
+        "title": "Export Visual Graph (SVG)",
         "category": "Conversation Roadmap",
         "icon": "$(file-media)"
       },
       {
         "command": "conversationRoadmap.deleteAllData",
-        "title": "Roadmap: Delete All Local Data",
+        "title": "Delete All Local Data",
         "category": "Conversation Roadmap",
         "icon": "$(trash)"
       },
       {
         "command": "conversationRoadmap.showOnboarding",
-        "title": "Roadmap: Show Onboarding and Known Limitations",
+        "title": "Show Onboarding and Known Limitations",
         "category": "Conversation Roadmap",
         "icon": "$(info)"
       }
@@ -104,6 +110,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show a one-time onboarding notice explaining that Conversation Roadmap can only capture messages explicitly sent to @roadmap (VS Code's chat API never exposes turns sent to other participants or unscoped chat)."
+        },
+        "conversationRoadmap.autoPrefillMention": {
+          "type": "boolean",
+          "default": true,
+          "description": "After an @roadmap response, prepare @roadmap in the chat input without sending it. Disable this if you prefer to select the participant manually."
         }
       }
     }

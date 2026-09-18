@@ -1,5 +1,5 @@
 /**
- * "Roadmap: Delete All Local Data" (Phase 9) - lets a user permanently
+ * "Conversation Roadmap: Delete All Local Data" (Phase 9) - lets a user permanently
  * erase every conversation turn and roadmap graph the extension has
  * stored, in line with the Key Engineering Principle that conversation
  * content is stored locally by default and must stay under the user's

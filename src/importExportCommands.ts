@@ -12,7 +12,7 @@ import { exportRoadmapDocument, parseImportPayload, planImport } from "./model/e
 import { exportRoadmapToMarkdown } from "./model/markdownExport";
 import { exportRoadmapToSvg } from "./export/svgExport";
 
-/** "Roadmap: Export Roadmap (JSON)" - writes the full, currently persisted document to a user-chosen `.json` file. */
+/** "Conversation Roadmap: Export Roadmap (JSON)" - writes the full, currently persisted document to a user-chosen `.json` file. */
 export async function exportRoadmapCommand(roadmapStore: RoadmapStore): Promise<void> {
   const document = await roadmapStore.load();
   const uri = await vscode.window.showSaveDialog({
@@ -29,7 +29,7 @@ export async function exportRoadmapCommand(roadmapStore: RoadmapStore): Promise<
 }
 
 /**
- * "Roadmap: Import Roadmap (JSON)" - reads a user-chosen `.json` file,
+ * "Conversation Roadmap: Import Roadmap (JSON)" - reads a user-chosen `.json` file,
  * validates it (rejecting anything malformed or unmigratable without
  * touching persisted state), and merges it into the current document.
  * Any roadmap id collision is never silently overwritten: the incoming
@@ -77,7 +77,7 @@ export async function importRoadmapCommand(roadmapStore: RoadmapStore): Promise<
   }
 }
 
-/** "Roadmap: Export Graph + Outline (Markdown)" - writes Mermaid plus a readable outline to a `.md` file. */
+/** "Conversation Roadmap: Export Graph + Outline (Markdown)" - writes Mermaid plus a readable outline to a `.md` file. */
 export async function exportMarkdownOutlineCommand(roadmapStore: RoadmapStore): Promise<void> {
   const document = await roadmapStore.load();
   const roadmap = document.roadmaps[0];
@@ -98,7 +98,7 @@ export async function exportMarkdownOutlineCommand(roadmapStore: RoadmapStore): 
   void vscode.window.showInformationMessage(`Roadmap Markdown exported to ${uri.fsPath}`);
 }
 
-/** "Roadmap: Export Visual Graph (SVG)" - writes a standalone vector rendering of the default roadmap. */
+/** "Conversation Roadmap: Export Visual Graph (SVG)" - writes a standalone vector rendering of the default roadmap. */
 export async function exportSvgCommand(roadmapStore: RoadmapStore): Promise<void> {
   const document = await roadmapStore.load();
   const roadmap = document.roadmaps[0];

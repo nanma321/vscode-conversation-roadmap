@@ -60,6 +60,10 @@ describe("Marketplace metadata (Phase 10)", () => {
       assert.ok(command.title, `command ${command.command} must have a title`);
       assert.ok(command.category, `command ${command.command} must have a category`);
       assert.ok(command.icon, `command ${command.command} must have an icon`);
+      assert.ok(
+        !command.title.startsWith(`${command.category}:`) && !command.title.startsWith("Roadmap:"),
+        `command ${command.command} title must not repeat its category`
+      );
     }
   });
 

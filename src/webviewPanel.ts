@@ -27,6 +27,7 @@ import { applyWebviewMessage, HostToWebviewMessage, validateWebviewMessage } fro
 import { buildResumeContext, formatResumeQuery, ResumeSourceTurn } from "./resume/resumeContext";
 import { buildContentSecurityPolicy } from "./webviewCsp";
 import { loadDefaultRoadmap, saveRoadmap } from "./model/defaultRoadmap";
+import { prefillRoadmapChat } from "./vscodeChatPrefill";
 
 export const GRAPH_VIEW_TYPE = "conversationRoadmap.graph";
 
@@ -183,17 +184,8 @@ function postError(errors: string[]): void {
  * is ultimately started.
  */
 async function startResumeInteraction(query: string): Promise<void> {
-  const available = await vscode.commands.getCommands(true);
-  if (available.includes("workbench.action.chat.open")) {
-    try {
-      await vscode.commands.executeCommand("workbench.action.chat.open", { query });
-      return;
-    } catch {
-      // Fall through to the clipboard path below.
-    }
-  }
-  await vscode.env.clipboard.writeText(query);
-  void vscode.window.showInformationMessage(
+  await prefillRoadmapChat(
+    query,
     "Resume context copied to the clipboard. Paste it into the @roadmap chat to continue from this branch."
   );
 }

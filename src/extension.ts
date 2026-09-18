@@ -19,6 +19,8 @@ import {
 import { deleteAllDataCommand } from "./dataDeletion";
 import { RequestSummary, SummarizationService } from "./summarization/summarizationService";
 import { maybeShowOnboarding } from "./onboarding";
+import { CONTINUE_ROADMAP_COMMAND, ROADMAP_MENTION } from "./chatPrefill";
+import { prefillRoadmapChat } from "./vscodeChatPrefill";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Register synchronously before any startup work. The webview stores a small
@@ -33,7 +35,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await closeRestoredGraphTabs();
 
   // Storage lives under globalStorageUri so captured turns persist across
-  // window reloads and VS Code restarts (confirmed by the "Roadmap: Open
+  // window reloads and VS Code restarts (confirmed by "Conversation Roadmap: Open
   // Graph" command re-reading this same directory after a restart).
   const store = new TurnStore(context.globalStorageUri.fsPath);
   await store.load();
@@ -91,6 +93,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   registerRoadmapParticipant(context, store);
+
+  const continueChatCommand = vscode.commands.registerCommand(
+    CONTINUE_ROADMAP_COMMAND,
+    async () => {
+      await prefillRoadmapChat(
+        ROADMAP_MENTION,
+        "The @roadmap mention was copied to the clipboard. Paste it into chat to continue."
+      );
+    }
+  );
+  context.subscriptions.push(continueChatCommand);
 
   const openGraphCommand = vscode.commands.registerCommand(
     "conversationRoadmap.openGraph",
