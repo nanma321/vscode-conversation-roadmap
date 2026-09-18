@@ -1,10 +1,16 @@
-# Conversation Roadmap (Phase 1 spike)
+# Conversation Roadmap
 
-Minimal VS Code extension skeleton validating the feasibility of the
-Conversation Roadmap product. This is the Phase 1 technical spike only -
-no domain model, schema, or summarization yet (see later phases).
+A VS Code extension that turns supported `@roadmap` conversations into a
+persistent, editable branching graph. It preserves source-message provenance,
+supports resuming from earlier topics, and exports roadmaps as JSON, Mermaid
+Markdown, or SVG.
 
-## What this spike proves
+> [!IMPORTANT]
+> VS Code's public chat API only exposes messages explicitly addressed to
+> `@roadmap`. The extension cannot read ordinary Copilot chat history or turns
+> sent to other participants.
+
+## Features
 
 - A `@roadmap` chat participant can be registered and only receives
   requests explicitly addressed to it (`contributes.chatParticipants` +

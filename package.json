@@ -9,10 +9,10 @@
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/conversation-roadmap/conversation-roadmap"
+    "url": "https://github.com/nanma321/vscode-conversation-roadmap"
   },
   "bugs": {
-    "url": "https://github.com/conversation-roadmap/conversation-roadmap/issues"
+    "url": "https://github.com/nanma321/vscode-conversation-roadmap/issues"
   },
   "keywords": [
     "chat",
