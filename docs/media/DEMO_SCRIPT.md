@@ -2,45 +2,64 @@
 
 The demo uses synthetic hackathon content. It does not contain captured user
 conversations, credentials, or private repository data. Captions are burned
-into both the narrated video frames and animated GIF.
+into the narrated video frames and animated GIF.
 
-## Scene 1 - Introduction
+## Scene 1 - Product and slogan
 
-Conversation Roadmap turns supported GitHub Copilot conversations into a
-persistent, editable map inside Visual Studio Code.
+Conversation Roadmap for VS Code Copilot Chat. Chats wander. Roadmaps remember.
 
-## Scene 2 - Automatic graph creation
+## Scene 2 - The problem
 
-Address a question to `@roadmap`. Each completed exchange is summarized into
-traceable topic, task, decision, and outcome nodes.
+You ask one quick question in VS Code Copilot Chat. A few follow-ups later, the
+useful decision is buried in scrollback.
 
-## Scene 3 - Node details and editing
+## Scene 3 - User scenarios
 
-Select a node to inspect its source conversation, change status or type, add
-personal notes and tags, or organize it visually.
+Maybe you are investigating a bug, comparing architecture choices, or returning
+Monday morning to ask: where were we?
 
-## Scene 4 - Search and filters
+## Scene 4 - How to start
 
-Search summaries and source text, filter by type, status, tags, highlights, or
-focus on only the newest creation batch.
+Start in VS Code Copilot Chat with `@roadmap`, then run **Conversation Roadmap:
+Open Graph** from the Command Palette.
 
-## Scene 5 - Resume from a node
+## Scene 5 - Why Conversation Roadmap
 
-Resume from any node to preview the exact context, ask a follow-up question,
-and create a new branch without changing the original path.
+Conversation Roadmap gives supported `@roadmap` chats a visible memory: topics,
+questions, alternatives, outcomes, and the source behind each node.
 
-## Scene 6 - Accessible outline
+## Scene 6 - Provenance and editing
 
-The accessible outline exposes nodes and connections to keyboard and
-screen-reader users, including editing and node movement without drag and drop.
+Select a node to inspect the exact conversation, update its status, add personal
+notes and tags, or organize the roadmap without losing provenance.
 
-## Scene 7 - Export and sharing
+## Scene 7 - Search and filters
 
-Export a complete JSON backup, Mermaid Markdown with a readable outline, or a
-standalone accessible SVG for your documentation and demo.
+Search summaries and source text, then filter by type, status, tags, highlights,
+or the newest creation batch.
+
+## Scene 8 - Resume action
+
+Choose **Resume from here** on any useful node to start a traceable alternative
+without changing the original path.
+
+## Scene 9 - Resume context preview
+
+Before anything is sent, review the exact context and add an optional follow-up
+question.
+
+## Scene 10 - Accessible outline
+
+The outline exposes nodes and connections for keyboard and screen-reader users,
+with editing and movement that do not require drag and drop.
+
+## Scene 11 - Export and sharing
+
+When it is time to share, export a complete JSON backup, Mermaid Markdown, or a
+standalone accessible SVG.
 
 ## Media details
 
-- Narration: Microsoft Zira Desktop text-to-speech
-- Video: H.264/AAC, 1280 x 720, 30 fps, 76 seconds
-- GIF: 960 x 540, 8 fps, 11 seconds
+- Narration: Microsoft Ava Multilingual neural voice
+- Video: H.264/AAC, 1280 x 720, 30 fps, 89 seconds
+- GIF: 960 x 540, 8 fps, 15 seconds

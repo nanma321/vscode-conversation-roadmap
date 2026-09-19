@@ -5,6 +5,9 @@ in this file.
 
 ## [0.1.2] - 2026-09-18
 
+- Reworked the demo around the user problem and scenarios before the feature
+  tour, with Microsoft Ava neural narration, burned-in captions, filter and
+  Resume callouts, and an explicit `@roadmap` onboarding scene.
 - Fill the single pre-created Resume node with the submitted resumed response
   instead of creating a redundant second Resume/response node.
 - Keep later turns in the resumed branch as a chain beneath its latest response.

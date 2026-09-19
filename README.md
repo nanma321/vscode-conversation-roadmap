@@ -17,7 +17,7 @@ and the source messages behind them.
 
 ![Animated Conversation Roadmap demo showing graph creation, node details, filters, resume preview, and accessible outline](docs/media/conversation-roadmap-demo.gif)
 
-[Watch the 76-second narrated demo](docs/media/conversation-roadmap-demo.mp4)
+[Watch the 89-second narrated demo](docs/media/conversation-roadmap-demo.mp4)
 · [Read the demo transcript](docs/media/DEMO_SCRIPT.md)
 
 ## Why use it?
