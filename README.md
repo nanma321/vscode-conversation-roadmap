@@ -11,6 +11,8 @@ and the source messages behind them.
 
 **Chats wander. Roadmaps remember.**
 
+![Conversation Roadmap hackathon cover showing a Copilot chat becoming a colorful branching graph](docs/media/conversation-roadmap-cover.png)
+
 ## See it in action
 
 ![Animated Conversation Roadmap demo showing graph creation, node details, filters, resume preview, and accessible outline](docs/media/conversation-roadmap-demo.gif)
