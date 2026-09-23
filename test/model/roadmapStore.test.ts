@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { RoadmapStore, RoadmapValidationError } from "../../src/model/roadmapStore";
 import { createDefaultSettings, createEmptyDocument, Roadmap, RoadmapDocument } from "../../src/model/types";
+import { StorageBlockedError } from "../../src/storageRecovery";
 
 function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "roadmap-store-"));
@@ -92,29 +93,106 @@ describe("RoadmapStore", () => {
     assert.strictEqual(parsed.roadmaps[0].id, "roadmap-1");
   });
 
-  it("falls back to an empty document (without deleting the file) when the on-disk file is corrupt JSON", async () => {
+  it("blocks writes and preserves corrupt roadmap storage byte-for-byte", async () => {
     const dir = makeTempDir();
     const filePath = path.join(dir, "roadmaps.json");
-    fs.writeFileSync(filePath, "{ not valid json", "utf8");
+    const corruptBytes = Buffer.from("{ not valid json", "utf8");
+    fs.writeFileSync(filePath, corruptBytes);
 
-    const store = new RoadmapStore(dir);
-    const doc = await store.load();
-    assert.strictEqual(doc.roadmaps.length, 0);
+    const store = new RoadmapStore(dir, {
+      now: () => new Date("2026-09-23T12:34:56.789Z"),
+    });
+    await assert.rejects(() => store.load(), StorageBlockedError);
+    await assert.rejects(
+      () => store.save({ version: 1, roadmaps: [sampleRoadmap()] }),
+      StorageBlockedError
+    );
 
-    // The corrupt file is left in place for inspection rather than deleted or overwritten.
-    assert.ok(fs.existsSync(filePath));
-    const raw = fs.readFileSync(filePath, "utf8");
-    assert.strictEqual(raw, "{ not valid json");
+    assert.deepStrictEqual(fs.readFileSync(filePath), corruptBytes);
+    const backupPath = `${filePath}.recovery-2026-09-23T12-34-56-789Z.bak`;
+    assert.deepStrictEqual(fs.readFileSync(backupPath), corruptBytes);
   });
 
-  it("falls back to an empty document when the on-disk file fails schema validation", async () => {
+  it("blocks when the on-disk file fails schema validation", async () => {
     const dir = makeTempDir();
     const filePath = path.join(dir, "roadmaps.json");
     fs.writeFileSync(filePath, JSON.stringify({ version: 1, roadmaps: [{ id: "incomplete" }] }), "utf8");
 
     const store = new RoadmapStore(dir);
-    const doc = await store.load();
-    assert.strictEqual(doc.roadmaps.length, 0);
+    await assert.rejects(() => store.load(), StorageBlockedError);
+    await assert.rejects(() => store.deleteAll(), StorageBlockedError);
+    assert.ok(fs.existsSync(filePath));
+    assert.ok(
+      fs.readdirSync(dir).some((name) => name.startsWith("roadmaps.json.recovery-"))
+    );
+  });
+
+  it("keeps a blocked instance closed while a fresh instance can load a repaired file", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "roadmaps.json");
+    fs.writeFileSync(filePath, "{broken", "utf8");
+    const blocked = new RoadmapStore(dir);
+    await assert.rejects(() => blocked.load(), StorageBlockedError);
+
+    const repaired: RoadmapDocument = { version: 1, roadmaps: [sampleRoadmap()] };
+    fs.writeFileSync(filePath, JSON.stringify(repaired), "utf8");
+    await assert.rejects(() => blocked.save(repaired), StorageBlockedError);
+
+    const recovered = new RoadmapStore(dir);
+    assert.deepStrictEqual(await recovered.load(), repaired);
+  });
+
+  it("blocks concurrent saves while the recovery backup is still pending", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "roadmaps.json");
+    const original = Buffer.from("{broken-concurrent", "utf8");
+    fs.writeFileSync(filePath, original);
+    let releaseBackup: (() => void) | undefined;
+    let backupStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      backupStarted = resolve;
+    });
+    const store = new RoadmapStore(dir, {
+      copyFile: async (source, destination) => {
+        backupStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseBackup = resolve;
+        });
+        await fs.promises.copyFile(source, destination);
+      },
+    });
+
+    const load = store.load();
+    await started;
+    const save = store.save({ version: 1, roadmaps: [sampleRoadmap()] });
+    assert.deepStrictEqual(fs.readFileSync(filePath), original);
+    releaseBackup?.();
+    await assert.rejects(() => load, StorageBlockedError);
+    await assert.rejects(() => save, StorageBlockedError);
+  });
+
+  it("uses a durable marker to block another loaded roadmap store instance", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "roadmaps.json");
+    const firstWindow = new RoadmapStore(dir);
+    await firstWindow.load();
+    await firstWindow.save({ version: 1, roadmaps: [sampleRoadmap()] });
+
+    const corruptBytes = Buffer.from("{cross-window-corruption", "utf8");
+    fs.writeFileSync(filePath, corruptBytes);
+    const detectingWindow = new RoadmapStore(dir);
+    await assert.rejects(() => detectingWindow.load(), StorageBlockedError);
+    assert.ok(fs.existsSync(`${filePath}.blocked`));
+
+    await assert.rejects(
+      () =>
+        firstWindow.save({
+          version: 1,
+          roadmaps: [sampleRoadmap({ title: "must not overwrite" })],
+        }),
+      StorageBlockedError
+    );
+    assert.deepStrictEqual(fs.readFileSync(filePath), corruptBytes);
   });
 
   it("round-trips a version-1 document through save and load without information loss", async () => {
@@ -178,6 +256,40 @@ describe("RoadmapStore", () => {
     assert.strictEqual(fresh.roadmaps[0].title, "Sample roadmap");
   });
 
+  it("serializes complete graph transactions so concurrent edits are not lost", async () => {
+    const dir = makeTempDir();
+    const store = new RoadmapStore(dir);
+    await store.load();
+    await store.save({ version: 1, roadmaps: [sampleRoadmap()] });
+    let releaseFirst: (() => void) | undefined;
+    let firstLoaded: (() => void) | undefined;
+    const loaded = new Promise<void>((resolve) => {
+      firstLoaded = resolve;
+    });
+
+    const first = store.transaction(async (access) => {
+      const document = await access.load();
+      firstLoaded?.();
+      await new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      document.roadmaps[0].title = "First edit";
+      await access.save(document);
+    });
+    await loaded;
+    const second = store.transaction(async (access) => {
+      const document = await access.load();
+      document.roadmaps[0].nodes[0].notes = "Second edit";
+      await access.save(document);
+    });
+
+    releaseFirst?.();
+    await Promise.all([first, second]);
+    const persisted = await new RoadmapStore(dir).load();
+    assert.strictEqual(persisted.roadmaps[0].title, "First edit");
+    assert.strictEqual(persisted.roadmaps[0].nodes[0].notes, "Second edit");
+  });
+
   it("recovers from an orphaned temp file left by an interrupted write, without touching the real file", async () => {
     const dir = makeTempDir();
     const store = new RoadmapStore(dir);
@@ -205,10 +317,13 @@ describe("RoadmapStore", () => {
     await store.load();
     await store.save({ version: 1, roadmaps: [sampleRoadmap()] });
 
+    const recoveryPath = path.join(dir, "roadmaps.json.recovery-old.bak");
+    fs.writeFileSync(recoveryPath, "old diagnostic copy", "utf8");
     await store.deleteAll();
 
     assert.deepStrictEqual(store.getDocument().roadmaps, []);
     assert.ok(!fs.existsSync(path.join(dir, "roadmaps.json")), "roadmaps.json should be deleted");
+    assert.ok(!fs.existsSync(recoveryPath), "recovery copies should be deleted");
 
     // A subsequent load from a fresh instance confirms nothing survives on disk.
     const reloadedStore = new RoadmapStore(dir);

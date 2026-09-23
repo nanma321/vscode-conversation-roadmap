@@ -81,6 +81,11 @@ export interface TurnReference {
   kind: "text" | "uri" | "location";
   /** Serialized textual representation of the reference's value. */
   value: string;
+  /** Original attached selection for a location reference. */
+  range?: {
+    start: { line: number; character: number };
+    end: { line: number; character: number };
+  };
 }
 
 /** 2D layout position for a node in the graph Webview (Phase 5). Manual positions must never be silently overwritten. */

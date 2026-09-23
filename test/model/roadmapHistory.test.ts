@@ -123,4 +123,16 @@ describe("RoadmapHistory", () => {
     assert.strictEqual(current, v2);
     assert.strictEqual(history.canUndo(), false);
   });
+
+  it("clones undo and redo state independently for persistence rollback", () => {
+    const history = new RoadmapHistory();
+    const before = sampleRoadmap({ title: "Before" });
+    const after = sampleRoadmap({ title: "After" });
+    history.record(before);
+
+    const copy = history.clone();
+    assert.strictEqual(copy.undo(after)?.title, "Before");
+    assert.strictEqual(copy.canUndo(), false);
+    assert.strictEqual(history.canUndo(), true);
+  });
 });

@@ -22,6 +22,8 @@ import { ROADMAP_MENTION } from "./chatPrefill";
 import { tryPrefillRoadmapChat } from "./vscodeChatPrefill";
 import { parseResumePrompt } from "./resume/resumeContext";
 import {
+  appendToCurrentPrompt,
+  buildCompactionDisclosure,
   ModelConversationMessage,
   ParticipantHistoryItem,
   prepareModelConversation,
@@ -31,6 +33,14 @@ import {
   ROADMAP_PARTICIPANT_ID,
   resolveChatSessionId,
 } from "./chatSession";
+import {
+  AttachedReferenceGroup,
+  buildReferenceContext,
+} from "./referenceContext";
+import {
+  toAttachedReference,
+  vscodeReferenceResourceReader,
+} from "./vscodeReferenceContext";
 
 let turnCounter = 0;
 let sessionCounter = 0;
@@ -45,18 +55,37 @@ function nextSessionId(): string {
   return `session-${Date.now()}-${sessionCounter}`;
 }
 
-function accessibleHistory(chatContext: vscode.ChatContext): ParticipantHistoryItem[] {
-  const history: ParticipantHistoryItem[] = [];
+interface AccessibleHistory {
+  items: ParticipantHistoryItem[];
+  referenceGroups: Map<
+    string,
+    { origin: string; references: readonly vscode.ChatPromptReference[] }
+  >;
+}
+
+function accessibleHistory(chatContext: vscode.ChatContext): AccessibleHistory {
+  const items: ParticipantHistoryItem[] = [];
+  const referenceGroups = new Map<
+    string,
+    { origin: string; references: readonly vscode.ChatPromptReference[] }
+  >();
+  let requestIndex = 0;
   for (const turn of chatContext.history) {
     if (turn.participant !== ROADMAP_PARTICIPANT_ID) {
       continue;
     }
     if (turn instanceof vscode.ChatRequestTurn) {
-      history.push({ kind: "request", prompt: turn.prompt });
+      const referenceKey = `history-request-${requestIndex}`;
+      requestIndex += 1;
+      items.push({ kind: "request", prompt: turn.prompt, referenceKey });
+      referenceGroups.set(referenceKey, {
+        origin: `earlier request: ${turn.prompt.slice(0, 120)}`,
+        references: turn.references,
+      });
       continue;
     }
     if (turn instanceof vscode.ChatResponseTurn) {
-      history.push({
+      items.push({
         kind: "response",
         parts: turn.response.map((part) =>
           part instanceof vscode.ChatResponseMarkdownPart
@@ -66,7 +95,7 @@ function accessibleHistory(chatContext: vscode.ChatContext): ParticipantHistoryI
       });
     }
   }
-  return history;
+  return { items, referenceGroups };
 }
 
 function resolveSessionId(chatContext: vscode.ChatContext): string {
@@ -113,10 +142,54 @@ export function registerRoadmapParticipant(
     let result = chatResult(sessionId);
 
     try {
+      const history = accessibleHistory(chatContext);
       const conversation = prepareModelConversation(
-        accessibleHistory(chatContext),
+        history.items,
         request.prompt
       );
+      const referenceGroups: AttachedReferenceGroup[] = [
+        {
+          origin: "current request",
+          references: request.references.map(toAttachedReference),
+        },
+        ...conversation.retainedHistoryReferenceKeys
+          .slice()
+          .reverse()
+          .map((key) => history.referenceGroups.get(key))
+          .filter(
+            (
+              group
+            ): group is {
+              origin: string;
+              references: readonly vscode.ChatPromptReference[];
+            } => Boolean(group)
+          )
+          .map((group) => ({
+            origin: group.origin,
+            references: group.references.map(toAttachedReference),
+          })),
+      ];
+      const referenceContext = await buildReferenceContext(
+        referenceGroups,
+        vscodeReferenceResourceReader
+      );
+      const compaction = buildCompactionDisclosure(conversation);
+      if (compaction) {
+        stream.progress(compaction.userMessage);
+      }
+      if (referenceContext.issues.length > 0) {
+        stream.progress(
+          `Attached context warning: ${referenceContext.issues.join("; ")}.`
+        );
+      } else if (referenceContext.truncatedReferences > 0) {
+        stream.progress(
+          `${referenceContext.truncatedReferences} attached reference(s) were truncated to fit the context budget.`
+        );
+      }
+      const modelConversation = appendToCurrentPrompt(conversation.messages, [
+        compaction?.modelInstruction ?? "",
+        referenceContext.context,
+      ]);
       const [model] = await vscode.lm.selectChatModels({ vendor: "copilot" });
       if (!model) {
         const error = new Error("No language model is available");
@@ -126,7 +199,7 @@ export function registerRoadmapParticipant(
           "Conversation Roadmap could not respond because no language model is available."
         );
       } else {
-        const messages = conversation.messages.map(toLanguageModelMessage);
+        const messages = modelConversation.map(toLanguageModelMessage);
         const chatResponse = await model.sendRequest(messages, {}, token);
         for await (const fragment of chatResponse.text) {
           if (token.isCancellationRequested) {

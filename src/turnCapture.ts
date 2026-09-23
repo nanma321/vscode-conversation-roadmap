@@ -24,8 +24,42 @@ export interface PromptReferenceLike {
 /** Caps how much text from a single reference value is retained. */
 const MAX_REFERENCE_TEXT_LENGTH = 4000;
 
-function isLocationLike(value: unknown): value is { uri: unknown } {
-  return typeof value === "object" && value !== null && "uri" in value && "range" in value;
+function isPositionLike(
+  value: unknown
+): value is { line: number; character: number } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const position = value as { line?: unknown; character?: unknown };
+  return (
+    Number.isSafeInteger(position.line) &&
+    Number.isSafeInteger(position.character)
+  );
+}
+
+function isLocationLike(
+  value: unknown
+): value is {
+  uri: unknown;
+  range: {
+    start: { line: number; character: number };
+    end: { line: number; character: number };
+  };
+} {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("uri" in value) ||
+    !("range" in value)
+  ) {
+    return false;
+  }
+  const range = (value as { range?: unknown }).range;
+  if (typeof range !== "object" || range === null) {
+    return false;
+  }
+  const candidate = range as { start?: unknown; end?: unknown };
+  return isPositionLike(candidate.start) && isPositionLike(candidate.end);
 }
 
 function isUriLike(value: unknown): value is { scheme: unknown } {
@@ -58,7 +92,16 @@ export function extractSupportedReferences(
         value: value.slice(0, MAX_REFERENCE_TEXT_LENGTH),
       });
     } else if (isLocationLike(value)) {
-      result.push({ id, description: modelDescription, kind: "location", value: String(value.uri) });
+      result.push({
+        id,
+        description: modelDescription,
+        kind: "location",
+        value: String(value.uri),
+        range: {
+          start: { ...value.range.start },
+          end: { ...value.range.end },
+        },
+      });
     } else if (isUriLike(value)) {
       result.push({ id, description: modelDescription, kind: "uri", value: String(value) });
     }

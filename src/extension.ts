@@ -9,6 +9,7 @@ import {
   showGraphWebview,
   updateGraph,
   resumeSelectedNode,
+  showGraphError,
 } from "./webviewPanel";
 import {
   exportMarkdownOutlineCommand,
@@ -21,6 +22,52 @@ import { RequestSummary, SummarizationService } from "./summarization/summarizat
 import { maybeShowOnboarding } from "./onboarding";
 import { CONTINUE_ROADMAP_COMMAND, ROADMAP_MENTION } from "./chatPrefill";
 import { prefillRoadmapChat } from "./vscodeChatPrefill";
+import { buildSummarizationNotice } from "./summarization/summarizationNotice";
+import { StorageBlockedError } from "./storageRecovery";
+
+async function reportOperationalError(error: unknown): Promise<void> {
+  const message =
+    error instanceof Error
+      ? error.message
+      : `Conversation Roadmap encountered an unexpected error: ${String(error)}`;
+  showGraphError(message);
+  const action =
+    error instanceof StorageBlockedError ? "Open Storage Folder" : undefined;
+  const choice = action
+    ? await vscode.window.showErrorMessage(message, action)
+    : await vscode.window.showErrorMessage(message);
+  if (choice === action && error instanceof StorageBlockedError) {
+    await vscode.env.openExternal(vscode.Uri.file(contextDirectory(error.filePath)));
+  }
+}
+
+function contextDirectory(filePath: string): string {
+  const separator = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  return separator >= 0 ? filePath.slice(0, separator) : filePath;
+}
+
+function reportSummarizationOutcome(outcome: Awaited<ReturnType<SummarizationService["summarizeNewTurns"]>>): void {
+  const notice = buildSummarizationNotice(outcome);
+  if (!notice) {
+    return;
+  }
+  showGraphError(notice.message);
+  if (notice.severity === "error") {
+    void vscode.window.showErrorMessage(notice.message);
+  } else {
+    void vscode.window.showWarningMessage(notice.message);
+  }
+}
+
+async function runWithOperationalReporting(
+  operation: () => Promise<void>
+): Promise<void> {
+  try {
+    await operation();
+  } catch (error) {
+    await reportOperationalError(error);
+  }
+}
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Register synchronously before any startup work. The webview stores a small
@@ -38,12 +85,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // window reloads and VS Code restarts (confirmed by "Conversation Roadmap: Open
   // Graph" command re-reading this same directory after a restart).
   const store = new TurnStore(context.globalStorageUri.fsPath);
-  await store.load();
-
-  // The domain-model roadmap graph (Phase 2/5) is persisted separately from
-  // raw captured turns, in its own file under the same storage directory.
   const roadmapStore = new RoadmapStore(context.globalStorageUri.fsPath);
-  await roadmapStore.load();
+  try {
+    await store.load();
+    // The domain-model roadmap graph (Phase 2/5) is persisted separately from
+    // raw captured turns, in its own file under the same storage directory.
+    await roadmapStore.load();
+  } catch (error) {
+    await reportOperationalError(error);
+    throw error;
+  }
 
   // Summarization wiring (Phase 4 logic, connected here): after a turn is
   // captured, the model is asked to fold it into the roadmap graph. The model
@@ -76,19 +127,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // turn into graph nodes and refresh again if the graph changed.
   context.subscriptions.push({
     dispose: store.onDidChange((turns) => {
-      void updateGraph(turns);
+      void updateGraph(turns).catch((error) => reportOperationalError(error));
       void summarizer
         .summarizeNewTurns()
-        .then((outcome) => {
+        .then(async (outcome) => {
+          reportSummarizationOutcome(outcome);
           if (outcome.changed) {
-            return updateGraph(store.getAll());
+            await updateGraph(store.getAll());
           }
-          return undefined;
         })
-        .catch(() => {
-          // Summarization failures must never break capture; the turn is still
-          // recorded and visible in the transcript view.
-        });
+        .catch((error) => reportOperationalError(error));
     }),
   });
 
@@ -108,11 +156,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const openGraphCommand = vscode.commands.registerCommand(
     "conversationRoadmap.openGraph",
     async () => {
-      // Reload from disk each time the command runs so the graph reflects
-      // turns captured in prior sessions, confirming reload behavior.
-      await store.load();
-      await summarizer.backfillExistingQuestions();
-      await showGraphWebview(context, store, roadmapStore, () => summarizer.clearAllRoadmaps());
+      await runWithOperationalReporting(async () => {
+        // Reload from disk each time the command runs so the graph reflects
+        // turns captured in prior sessions, confirming reload behavior.
+        await store.load();
+        const summary = await summarizer.summarizeNewTurns();
+        reportSummarizationOutcome(summary);
+        const backfill = await summarizer.backfillExistingQuestions();
+        reportSummarizationOutcome(backfill);
+        await showGraphWebview(
+          context,
+          store,
+          roadmapStore,
+          () => summarizer.clearAllRoadmaps()
+        );
+      });
     }
   );
   context.subscriptions.push(openGraphCommand);
@@ -122,7 +180,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const resumeCommand = vscode.commands.registerCommand(
     "conversationRoadmap.resumeFromNode",
     async () => {
-      await resumeSelectedNode();
+      await runWithOperationalReporting(() => resumeSelectedNode());
     }
   );
   context.subscriptions.push(resumeCommand);
@@ -133,7 +191,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const exportRoadmapCmd = vscode.commands.registerCommand(
     "conversationRoadmap.exportRoadmap",
     async () => {
-      await exportRoadmapCommand(roadmapStore);
+      await runWithOperationalReporting(() => exportRoadmapCommand(roadmapStore));
     }
   );
   context.subscriptions.push(exportRoadmapCmd);
@@ -141,10 +199,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const importRoadmapCmd = vscode.commands.registerCommand(
     "conversationRoadmap.importRoadmap",
     async () => {
-      await importRoadmapCommand(roadmapStore);
-      // Refresh any open graph panel so an import is immediately visible
-      // without requiring the user to reopen it.
-      await updateGraph(store.getAll());
+      await runWithOperationalReporting(async () => {
+        await importRoadmapCommand(roadmapStore);
+        // Refresh any open graph panel so an import is immediately visible
+        // without requiring the user to reopen it.
+        await updateGraph(store.getAll());
+      });
     }
   );
   context.subscriptions.push(importRoadmapCmd);
@@ -152,7 +212,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const exportMarkdownOutlineCmd = vscode.commands.registerCommand(
     "conversationRoadmap.exportMarkdownOutline",
     async () => {
-      await exportMarkdownOutlineCommand(roadmapStore);
+      await runWithOperationalReporting(() =>
+        exportMarkdownOutlineCommand(roadmapStore)
+      );
     }
   );
   context.subscriptions.push(exportMarkdownOutlineCmd);
@@ -160,7 +222,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const exportSvgCmd = vscode.commands.registerCommand(
     "conversationRoadmap.exportSvg",
     async () => {
-      await exportSvgCommand(roadmapStore);
+      await runWithOperationalReporting(() => exportSvgCommand(roadmapStore));
     }
   );
   context.subscriptions.push(exportSvgCmd);
@@ -169,7 +231,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const deleteAllDataCmd = vscode.commands.registerCommand(
     "conversationRoadmap.deleteAllData",
     async () => {
-      await deleteAllDataCommand(store, roadmapStore);
+      await runWithOperationalReporting(() =>
+        deleteAllDataCommand(store, roadmapStore)
+      );
     }
   );
   context.subscriptions.push(deleteAllDataCmd);

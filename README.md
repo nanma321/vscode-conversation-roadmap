@@ -91,6 +91,10 @@ code --install-extension conversation-roadmap-0.1.2.vsix
 Your captured conversation now has a visual path, and every generated node
 remains linked to its source turn.
 
+Short follow-ups retain the bounded `@roadmap` conversation context. If older
+history must be compacted, the chat shows what was omitted and confirms that
+the newest coherent exchanges and active Resume seed were retained.
+
 > [!IMPORTANT]
 > VS Code only exposes messages explicitly routed to `@roadmap`. A misspelled
 > mention, ordinary Copilot message, or message sent to another participant is
@@ -148,6 +152,16 @@ Original topic
 ```
 
 The original path and transcript remain unchanged.
+
+### Work with attached context
+
+Attach text, a file, or a selection to an `@roadmap` request as you normally
+would in Copilot Chat. Conversation Roadmap reads only those explicitly
+attached resources through public VS Code APIs, applies attached selection
+ranges, and sends bounded content to the response model. Current attachments
+take priority, followed by attachments from the newest retained participant
+history. Unreadable, unsupported, duplicate, or oversized references are
+reported rather than silently invented.
 
 ### Correct the graph
 
@@ -208,6 +222,13 @@ Open the Command Palette with `Ctrl+Shift+P` and search for
 - Webview messages, model output, and imports are validated before persistence.
 - Turn and graph files use atomic writes and recover from interrupted temporary
   files.
+- Corrupt or unreadable storage fails closed: the original file is never
+  overwritten, a timestamped diagnostic copy is attempted, and writes remain
+  blocked across VS Code windows by a durable marker and file lock until the
+  file is repaired and VS Code is reloaded.
+- Summarization makes at most two model attempts per completed turn. If both
+  fail, the graph receives a clearly labeled source-linked fallback instead of
+  silently losing the turn.
 
 The roadmap graph is cumulative across captured sessions. Use the Session
 selector to focus the graph or outline on one conversation without deleting

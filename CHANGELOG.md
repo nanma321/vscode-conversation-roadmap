@@ -3,6 +3,23 @@
 All notable changes to the "Conversation Roadmap" extension are documented
 in this file.
 
+## [0.1.4] - 2026-09-23
+
+- Retry transient summarization failures once, persist the attempt count, and
+  create a chronological source-linked fallback node after the second failure
+  so completed turns cannot silently disappear from the graph.
+- Surface aggregated summarization errors, retry state, and fallback creation
+  in VS Code and in the open graph instead of silently swallowing failures.
+- Send explicitly attached text, files, and selections to the response model
+  with strict per-reference and total budgets, newest-context priority, and
+  explicit handling for unreadable or unsupported references.
+- Disclose history compaction to both the user and model without duplicating
+  the current prompt or pretending omitted content is known.
+- Fail closed when transcript or roadmap storage is corrupt or unreadable,
+  preserve a timestamped diagnostic copy, block cross-window mutations with a
+  durable marker and file lock, and provide safe recovery guidance without
+  overwriting the original file.
+
 ## [0.1.3] - 2026-09-23
 
 - Send bounded, ordered `@roadmap` request and Markdown response history to the

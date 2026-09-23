@@ -10,6 +10,7 @@ export interface ModelConversationMessage {
 export interface ParticipantHistoryRequest {
   kind: "request";
   prompt: unknown;
+  referenceKey?: string;
 }
 
 export interface ParticipantHistoryResponse {
@@ -30,6 +31,8 @@ export interface PreparedModelConversation {
   currentResumeNodeId?: string;
   omittedHistoryMessages: number;
   omittedHistoryCharacters: number;
+  retainedHistoryReferenceKeys: string[];
+  retainedResumeSeed: boolean;
 }
 
 export const DEFAULT_MAX_HISTORY_MESSAGES = 20;
@@ -38,6 +41,7 @@ export const DEFAULT_MAX_HISTORY_CHARACTERS = 24000;
 interface HistoryExchange {
   messages: ModelConversationMessage[];
   isResumeSeed: boolean;
+  referenceKey?: string;
 }
 
 interface MarkdownHistoryPart {
@@ -81,6 +85,7 @@ function normalizeHistory(history: readonly ParticipantHistoryItem[]): HistoryEx
       currentExchange = {
         messages: [{ role: "user", content: parsed.prompt }],
         isResumeSeed: parsed.resumeNodeId !== undefined,
+        ...(item.referenceKey ? { referenceKey: item.referenceKey } : {}),
       };
       exchanges.push(currentExchange);
       continue;
@@ -297,6 +302,11 @@ export function prepareModelConversation(
     .sort(([left], [right]) => left - right)
     .flatMap(([, messages]) => messages);
   const selectedCharacters = messageCharacters(selectedHistory);
+  const retainedHistoryReferenceKeys = [...selected.entries()]
+    .sort(([left], [right]) => left - right)
+    .filter(([, messages]) => messages.some((message) => message.role === "user"))
+    .map(([index]) => relevantExchanges[index].referenceKey)
+    .filter((key): key is string => Boolean(key));
 
   return {
     messages: [
@@ -310,5 +320,58 @@ export function prepareModelConversation(
     ...(current.resumeNodeId ? { currentResumeNodeId: current.resumeNodeId } : {}),
     omittedHistoryMessages: originalMessages.length - selectedHistory.length,
     omittedHistoryCharacters: originalCharacters - selectedCharacters,
+    retainedHistoryReferenceKeys,
+    retainedResumeSeed:
+      resumeSeedIndex >= 0 &&
+      selected.has(resumeSeedIndex) &&
+      (selected.get(resumeSeedIndex) ?? []).some((message) => message.role === "user"),
   };
+}
+
+export interface CompactionDisclosure {
+  userMessage: string;
+  modelInstruction: string;
+}
+
+export function buildCompactionDisclosure(
+  conversation: PreparedModelConversation
+): CompactionDisclosure | undefined {
+  if (
+    conversation.omittedHistoryMessages <= 0 &&
+    conversation.omittedHistoryCharacters <= 0
+  ) {
+    return undefined;
+  }
+  const retained =
+    conversation.retainedResumeSeed || conversation.currentResumeNodeId
+    ? "the newest coherent exchanges and the active Resume seed"
+    : "the newest coherent exchanges";
+  return {
+    userMessage:
+      `Conversation context was compacted: ${conversation.omittedHistoryMessages} earlier ` +
+      `message(s) and ${conversation.omittedHistoryCharacters} character(s) were omitted; ` +
+      `${retained} were retained.`,
+    modelInstruction:
+      "Context compaction notice: earlier participant history was omitted to stay within " +
+      `the context budget. ${retained} were retained. Do not infer, invent, or claim ` +
+      "knowledge of the omitted content.",
+  };
+}
+
+/** Adds context to the existing current-user message without creating another prompt slot. */
+export function appendToCurrentPrompt(
+  messages: readonly ModelConversationMessage[],
+  additions: readonly string[]
+): ModelConversationMessage[] {
+  const nonEmptyAdditions = additions.filter((addition) => addition.trim().length > 0);
+  if (nonEmptyAdditions.length === 0) {
+    return messages.map((message) => ({ ...message }));
+  }
+  const result = messages.map((message) => ({ ...message }));
+  const current = result[result.length - 1];
+  if (!current || current.role !== "user") {
+    throw new Error("The prepared conversation does not end with the current user prompt");
+  }
+  current.content = `${current.content}\n\n${nonEmptyAdditions.join("\n\n")}`;
+  return result;
 }

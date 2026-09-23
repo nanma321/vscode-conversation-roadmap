@@ -1,11 +1,17 @@
 import * as assert from "assert";
 import {
+  appendToCurrentPrompt,
+  buildCompactionDisclosure,
   ParticipantHistoryItem,
   prepareModelConversation,
 } from "../src/chatHistory";
 
-function request(prompt: unknown): ParticipantHistoryItem {
-  return { kind: "request", prompt };
+function request(prompt: unknown, referenceKey?: string): ParticipantHistoryItem {
+  return {
+    kind: "request",
+    prompt,
+    ...(referenceKey ? { referenceKey } : {}),
+  };
 }
 
 function response(...parts: unknown[]): ParticipantHistoryItem {
@@ -17,7 +23,7 @@ function markdown(text: string): unknown {
 }
 
 describe("participant chat history", () => {
-  it("keeps the design discussion for a short approval and its implementation follow-up", () => {
+  it("reproduces the log-analyzer design, short approval, and implementation follow-up", () => {
     const designHistory = [
       request("Design a log analyzer with streaming input."),
       response(markdown("Use a parser pipeline and bounded event queue.")),
@@ -168,6 +174,70 @@ describe("participant chat history", () => {
     );
     assert.ok(result.omittedHistoryMessages > 0);
     assert.ok(result.omittedHistoryCharacters > 0);
+  });
+
+  it("reports retained historical reference keys in newest-context order", () => {
+    const result = prepareModelConversation(
+      [
+        request("old question", "old-reference"),
+        response(markdown("old answer")),
+        request("new question", "new-reference"),
+        response(markdown("new answer")),
+      ],
+      "continue",
+      { maxHistoryMessages: 2, maxHistoryCharacters: 1000 }
+    );
+
+    assert.deepStrictEqual(result.retainedHistoryReferenceKeys, ["new-reference"]);
+  });
+
+  it("discloses compaction to the user and model without adding a prompt slot", () => {
+    const result = prepareModelConversation(
+      [
+        request("old question"),
+        response(markdown("old answer")),
+        request("new question"),
+        response(markdown("new answer")),
+      ],
+      "current request",
+      { maxHistoryMessages: 2, maxHistoryCharacters: 1000 }
+    );
+    const disclosure = buildCompactionDisclosure(result);
+    assert.ok(disclosure);
+    assert.ok(disclosure!.userMessage.includes("2 earlier message(s)"));
+    assert.ok(disclosure!.modelInstruction.includes("Do not infer"));
+
+    const withInstruction = appendToCurrentPrompt(result.messages, [
+      disclosure!.modelInstruction,
+    ]);
+    assert.strictEqual(withInstruction.length, result.messages.length);
+    assert.strictEqual(
+      withInstruction.filter((message) => message.content.includes("current request"))
+        .length,
+      1
+    );
+    assert.ok(withInstruction[withInstruction.length - 1].content.includes("Context compaction notice"));
+  });
+
+  it("does not emit a compaction disclosure when nothing was omitted", () => {
+    const result = prepareModelConversation(
+      [request("question"), response(markdown("answer"))],
+      "continue"
+    );
+    assert.strictEqual(buildCompactionDisclosure(result), undefined);
+  });
+
+  it("reports the current Resume seed as retained when older history is omitted", () => {
+    const result = prepareModelConversation(
+      [request("old question"), response(markdown("old answer"))],
+      "Resuming from here.\n<!-- conversation-roadmap:resume=resume-node -->"
+    );
+    const disclosure = buildCompactionDisclosure(result);
+
+    assert.ok(disclosure);
+    assert.ok(disclosure!.userMessage.includes("active Resume seed"));
+    assert.strictEqual(result.messages.length, 1);
+    assert.ok(result.messages[0].content.includes("Resuming from here."));
   });
 
   it("uses only textual Markdown response parts and ignores malformed content", () => {

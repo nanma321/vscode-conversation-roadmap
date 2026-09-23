@@ -36,6 +36,14 @@ export class RoadmapHistory {
     return this.redoStack.length > 0;
   }
 
+  /** Creates an independent copy for rolling back history if persistence fails. */
+  clone(): RoadmapHistory {
+    const copy = new RoadmapHistory(this.limit);
+    copy.undoStack.push(...this.undoStack);
+    copy.redoStack.push(...this.redoStack);
+    return copy;
+  }
+
   /**
    * Records `previous` (the roadmap as it was *before* an about-to-be-applied
    * edit) onto the undo stack, and clears the redo stack, since applying a

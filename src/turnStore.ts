@@ -9,6 +9,19 @@
 import * as fs from "fs";
 import * as path from "path";
 import { LEGACY_SESSION_ID } from "./legacySessionId";
+import {
+  blockStorageAfterLoadFailure,
+  StorageBlockedError,
+  StorageRecoveryDependencies,
+} from "./storageRecovery";
+import type { ReferenceRange } from "./referenceContext";
+import {
+  assertNoStorageBlockedMarker,
+  clearStorageBlockedMarker,
+  StorageFileLock,
+  withStorageFileLock,
+  writeStorageBlockedMarker,
+} from "./storageFileGuard";
 
 /** Re-exported for backward compatibility; import directly from `legacySessionId.ts` in browser-bundled (Webview) code to avoid pulling in this module's `fs`/`path` dependency. */
 export { LEGACY_SESSION_ID };
@@ -28,6 +41,8 @@ export interface TurnReference {
   kind: "text" | "uri" | "location";
   /** Serialized textual representation of the reference's value. */
   value: string;
+  /** Original attached selection, for location references. */
+  range?: ReferenceRange;
 }
 
 /** A single captured request/response exchange with the `@roadmap` participant. */
@@ -61,6 +76,8 @@ export interface TurnRecord {
    * Turns persisted before references were captured are normalized to `[]` on load.
    */
   references: TurnReference[];
+  /** Number of model summarization calls already spent on this turn. */
+  summarizationAttempts?: number;
 }
 
 const STORE_FILE_NAME = "turns.json";
@@ -68,6 +85,63 @@ const STORE_FILE_NAME = "turns.json";
 interface StoreFileShape {
   version: 1;
   turns: TurnRecord[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStoredReference(value: unknown): value is TurnReference {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.id === "string" &&
+    (value.description === undefined || typeof value.description === "string") &&
+    (value.kind === "text" || value.kind === "uri" || value.kind === "location") &&
+    typeof value.value === "string" &&
+    (value.range === undefined ||
+      (isRecord(value.range) &&
+        isRecord(value.range.start) &&
+        isRecord(value.range.end) &&
+        Number.isSafeInteger(value.range.start.line) &&
+        Number.isSafeInteger(value.range.start.character) &&
+        Number.isSafeInteger(value.range.end.line) &&
+        Number.isSafeInteger(value.range.end.character)))
+  );
+}
+
+function isStoredTurn(value: unknown): value is TurnRecord {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.id === "string" &&
+    (value.sessionId === undefined || typeof value.sessionId === "string") &&
+    typeof value.timestamp === "string" &&
+    typeof value.request === "string" &&
+    typeof value.response === "string" &&
+    typeof value.completed === "boolean" &&
+    (value.roadmapExcluded === undefined || typeof value.roadmapExcluded === "boolean") &&
+    (value.resumeNodeId === undefined || typeof value.resumeNodeId === "string") &&
+    (value.summarizationAttempts === undefined ||
+      (Number.isSafeInteger(value.summarizationAttempts) &&
+        (value.summarizationAttempts as number) >= 0)) &&
+    (value.references === undefined ||
+      (Array.isArray(value.references) && value.references.every(isStoredReference)))
+  );
+}
+
+function parseStoreFile(value: unknown): StoreFileShape {
+  if (
+    !isRecord(value) ||
+    value.version !== 1 ||
+    !Array.isArray(value.turns) ||
+    !value.turns.every(isStoredTurn)
+  ) {
+    throw new Error("turns.json does not match the supported version 1 storage shape");
+  }
+  return value as unknown as StoreFileShape;
 }
 
 /**
@@ -80,9 +154,14 @@ export class TurnStore {
   private readonly filePath: string;
   private turns: TurnRecord[] = [];
   private loaded = false;
+  private blockedError: StorageBlockedError | undefined;
   private readonly changeListeners: Array<(turns: TurnRecord[]) => void> = [];
+  private mutationQueue: Promise<void> = Promise.resolve();
 
-  constructor(private readonly storageDir: string) {
+  constructor(
+    private readonly storageDir: string,
+    private readonly recoveryDependencies: StorageRecoveryDependencies = {}
+  ) {
     this.filePath = path.join(storageDir, STORE_FILE_NAME);
   }
 
@@ -108,35 +187,84 @@ export class TurnStore {
     }
   }
 
+  private enqueueMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.mutationQueue.then(operation, operation);
+    this.mutationQueue = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }
+
   /** Loads persisted turns from disk into memory. Safe to call multiple times. */
-  async load(): Promise<TurnRecord[]> {
-    await fs.promises.mkdir(this.storageDir, { recursive: true });
-    await this.cleanupOrphanedTempFiles();
-    try {
-      const raw = await fs.promises.readFile(this.filePath, "utf8");
-      const parsed = JSON.parse(raw) as StoreFileShape;
-      const loaded = Array.isArray(parsed.turns) ? parsed.turns : [];
-      // Normalize turns persisted before sessions/references existed so they
-      // group under a single "legacy" session and have a well-formed
-      // (empty) references array rather than appearing session-less or
-      // throwing when consumers iterate over `references`.
-      this.turns = loaded.map((turn) => ({
-        ...turn,
-        sessionId: turn.sessionId || LEGACY_SESSION_ID,
-        references: Array.isArray(turn.references) ? turn.references : [],
-      }));
-    } catch (err: unknown) {
-      const code = (err as NodeJS.ErrnoException)?.code;
-      if (code === "ENOENT") {
-        this.turns = [];
-      } else {
-        // Corrupt or unreadable file: do not throw and do not silently delete data.
-        // Start from an empty in-memory list but leave the file on disk for inspection.
-        this.turns = [];
-      }
+  load(): Promise<TurnRecord[]> {
+    return this.enqueueMutation(() => this.loadFromDisk());
+  }
+
+  private async loadFromDisk(
+    heldLock?: StorageFileLock
+  ): Promise<TurnRecord[]> {
+    if (this.blockedError) {
+      throw this.blockedError;
     }
-    this.loaded = true;
-    return this.getAll();
+    await fs.promises.mkdir(this.storageDir, { recursive: true });
+    const load = async (lock: StorageFileLock): Promise<TurnRecord[]> => {
+      try {
+        await this.cleanupOrphanedTempFiles();
+        const raw = await fs.promises.readFile(this.filePath, "utf8");
+        const parsed = parseStoreFile(JSON.parse(raw));
+        // Normalize turns persisted before sessions/references existed so they
+        // group under a single "legacy" session and have a well-formed
+        // (empty) references array rather than appearing session-less or
+        // throwing when consumers iterate over `references`.
+        this.turns = parsed.turns.map((turn) => ({
+          ...turn,
+          sessionId: turn.sessionId || LEGACY_SESSION_ID,
+          references: Array.isArray(turn.references) ? turn.references : [],
+        }));
+        await clearStorageBlockedMarker(this.filePath);
+      } catch (err: unknown) {
+        const code = (err as NodeJS.ErrnoException)?.code;
+        if (code === "ENOENT") {
+          this.turns = [];
+          await clearStorageBlockedMarker(this.filePath);
+        } else {
+          this.turns = [];
+          this.loaded = true;
+          this.blockedError = new StorageBlockedError(
+            "conversation transcript",
+            this.filePath,
+            err,
+            undefined,
+            new Error("diagnostic backup creation is still in progress")
+          );
+          this.blockedError = await blockStorageAfterLoadFailure(
+            "conversation transcript",
+            this.filePath,
+            err,
+            this.recoveryDependencies
+          );
+          try {
+            await writeStorageBlockedMarker(this.filePath, this.blockedError);
+          } catch (markerError) {
+            lock.retain();
+            this.blockedError = new StorageBlockedError(
+              "conversation transcript",
+              this.filePath,
+              err,
+              this.blockedError.backupPath,
+              markerError
+            );
+          }
+          throw this.blockedError;
+        }
+      }
+      this.loaded = true;
+      return this.getAll();
+    };
+    return heldLock
+      ? load(heldLock)
+      : withStorageFileLock(this.filePath, load);
   }
 
   /** Returns a defensive copy of all currently loaded turns, oldest first. */
@@ -145,13 +273,54 @@ export class TurnStore {
   }
 
   /** Appends a new turn and persists the full set atomically. */
-  async append(turn: TurnRecord): Promise<void> {
-    if (!this.loaded) {
-      await this.load();
-    }
-    this.turns.push({ ...turn });
-    await this.persist();
-    this.emitChange();
+  append(turn: TurnRecord): Promise<void> {
+    return this.enqueueMutation(async () => {
+      await fs.promises.mkdir(this.storageDir, { recursive: true });
+      await withStorageFileLock(this.filePath, async (lock) => {
+        await this.loadFromDisk(lock);
+        this.assertWritable();
+        const nextTurns = [...this.turns, { ...turn }];
+        await this.persist(nextTurns, lock);
+        this.turns = nextTurns;
+      });
+      this.emitChange();
+    });
+  }
+
+  /**
+   * Persists model-attempt counts without emitting a transcript change event,
+   * preventing the summarizer from recursively scheduling itself.
+   */
+  setSummarizationAttempts(
+    attemptsByTurnId: ReadonlyMap<string, number>
+  ): Promise<void> {
+    return this.enqueueMutation(async () => {
+      await fs.promises.mkdir(this.storageDir, { recursive: true });
+      await withStorageFileLock(this.filePath, async (lock) => {
+        await this.loadFromDisk(lock);
+        this.assertWritable();
+        let changed = false;
+        const nextTurns = this.turns.map((turn) => {
+          const requestedAttempts = attemptsByTurnId.get(turn.id);
+          if (requestedAttempts === undefined) {
+            return turn;
+          }
+          const attempts = Math.max(
+            turn.summarizationAttempts ?? 0,
+            requestedAttempts
+          );
+          if (attempts === turn.summarizationAttempts) {
+            return turn;
+          }
+          changed = true;
+          return { ...turn, summarizationAttempts: attempts };
+        });
+        if (changed) {
+          await this.persist(nextTurns, lock);
+          this.turns = nextTurns;
+        }
+      });
+    });
   }
 
   /**
@@ -159,30 +328,54 @@ export class TurnStore {
    * for future automatic graph generation. This metadata-only update does not
    * emit a transcript change because visible turn content is unchanged.
    */
-  async excludeAllFromRoadmap(): Promise<number> {
-    if (!this.loaded) {
-      await this.load();
-    }
-    let changed = 0;
-    this.turns = this.turns.map((turn) => {
-      if (turn.roadmapExcluded) {
-        return turn;
-      }
-      changed += 1;
-      return { ...turn, roadmapExcluded: true };
+  excludeAllFromRoadmap(): Promise<number> {
+    return this.enqueueMutation(async () => {
+      let changed = 0;
+      await fs.promises.mkdir(this.storageDir, { recursive: true });
+      await withStorageFileLock(this.filePath, async (lock) => {
+        await this.loadFromDisk(lock);
+        this.assertWritable();
+        const nextTurns = this.turns.map((turn) => {
+          if (turn.roadmapExcluded) {
+            return turn;
+          }
+          changed += 1;
+          return { ...turn, roadmapExcluded: true };
+        });
+        if (changed > 0) {
+          await this.persist(nextTurns, lock);
+          this.turns = nextTurns;
+        }
+      });
+      return changed;
     });
-    if (changed > 0) {
-      await this.persist();
-    }
-    return changed;
   }
 
-  private async persist(): Promise<void> {
+  private assertWritable(): void {
+    if (this.blockedError) {
+      throw this.blockedError;
+    }
+  }
+
+  private async persist(
+    turns: TurnRecord[],
+    heldLock?: StorageFileLock
+  ): Promise<void> {
+    this.assertWritable();
     await fs.promises.mkdir(this.storageDir, { recursive: true });
-    const payload: StoreFileShape = { version: 1, turns: this.turns };
-    const tempPath = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
-    await fs.promises.writeFile(tempPath, JSON.stringify(payload, null, 2), "utf8");
-    await fs.promises.rename(tempPath, this.filePath);
+    const persist = async (): Promise<void> => {
+      await assertNoStorageBlockedMarker("conversation transcript", this.filePath);
+      const payload: StoreFileShape = { version: 1, turns };
+      const tempPath = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
+      await fs.promises.writeFile(tempPath, JSON.stringify(payload, null, 2), "utf8");
+      this.assertWritable();
+      await fs.promises.rename(tempPath, this.filePath);
+    };
+    if (heldLock) {
+      await persist();
+    } else {
+      await withStorageFileLock(this.filePath, persist);
+    }
   }
 
   /**
@@ -196,18 +389,26 @@ export class TurnStore {
    * touching the real `turns.json`.
    */
   private async cleanupOrphanedTempFiles(): Promise<void> {
-    let entries: string[];
-    try {
-      entries = await fs.promises.readdir(this.storageDir);
-    } catch {
-      return;
-    }
+    const entries = await fs.promises.readdir(this.storageDir);
     const prefix = `${STORE_FILE_NAME}.tmp-`;
-    await Promise.all(
-      entries
-        .filter((name) => name.startsWith(prefix))
-        .map((name) => fs.promises.unlink(path.join(this.storageDir, name)).catch(() => undefined))
-    );
+    for (const name of entries.filter((entry) => entry.startsWith(prefix))) {
+      try {
+        await fs.promises.unlink(path.join(this.storageDir, name));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
+          throw new Error(`Could not remove interrupted transcript write "${name}": ${String(error)}`);
+        }
+      }
+    }
+  }
+
+  private async cleanupRecoveryArtifacts(): Promise<void> {
+    const entries = await fs.promises.readdir(this.storageDir);
+    const prefix = `${STORE_FILE_NAME}.recovery-`;
+    for (const name of entries.filter((entry) => entry.startsWith(prefix))) {
+      await fs.promises.unlink(path.join(this.storageDir, name));
+    }
+    await clearStorageBlockedMarker(this.filePath);
   }
 
   /**
@@ -217,18 +418,28 @@ export class TurnStore {
    * local data" command (Phase 9); irreversible, so callers must confirm
    * with the user before calling this.
    */
-  async deleteAll(): Promise<void> {
-    this.turns = [];
-    this.loaded = true;
-    await this.cleanupOrphanedTempFiles();
-    try {
-      await fs.promises.unlink(this.filePath);
-    } catch (err: unknown) {
-      const code = (err as NodeJS.ErrnoException)?.code;
-      if (code !== "ENOENT") {
-        throw err;
-      }
-    }
-    this.emitChange();
+  deleteAll(): Promise<void> {
+    return this.enqueueMutation(async () => {
+      await fs.promises.mkdir(this.storageDir, { recursive: true });
+      await withStorageFileLock(this.filePath, async (lock) => {
+        await this.loadFromDisk(lock);
+        this.assertWritable();
+        await assertNoStorageBlockedMarker("conversation transcript", this.filePath);
+        await this.cleanupOrphanedTempFiles();
+        this.assertWritable();
+        try {
+          await fs.promises.unlink(this.filePath);
+        } catch (err: unknown) {
+          const code = (err as NodeJS.ErrnoException)?.code;
+          if (code !== "ENOENT") {
+            throw err;
+          }
+        }
+        await this.cleanupRecoveryArtifacts();
+      });
+      this.turns = [];
+      this.loaded = true;
+      this.emitChange();
+    });
   }
 }

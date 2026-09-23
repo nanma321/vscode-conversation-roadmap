@@ -8,7 +8,7 @@
  * the roadmap by the background summarizer is exactly the roadmap the open
  * Webview renders. Kept dependency-free (no `vscode`) so it stays unit-testable.
  */
-import { RoadmapStore } from "./roadmapStore";
+import { RoadmapStoreAccess } from "./roadmapStore";
 import { createDefaultSettings, Roadmap, RoadmapDocument } from "./types";
 
 /** Single roadmap the graph Webview and summarizer read/write for now; multi-roadmap selection is a later phase. */
@@ -39,7 +39,7 @@ export function getOrCreateDefaultRoadmap(document: RoadmapDocument): { roadmap:
 }
 
 /** Loads (creating if necessary) the default roadmap, persisting it if it had to be created. */
-export async function loadDefaultRoadmap(store: RoadmapStore): Promise<Roadmap> {
+export async function loadDefaultRoadmap(store: RoadmapStoreAccess): Promise<Roadmap> {
   const doc = await store.load();
   const { roadmap, document } = getOrCreateDefaultRoadmap(doc);
   if (document !== doc) {
@@ -49,7 +49,7 @@ export async function loadDefaultRoadmap(store: RoadmapStore): Promise<Roadmap> 
 }
 
 /** Persists `roadmap` back into its document, replacing the prior copy of the same id. */
-export async function saveRoadmap(store: RoadmapStore, roadmap: Roadmap): Promise<void> {
+export async function saveRoadmap(store: RoadmapStoreAccess, roadmap: Roadmap): Promise<void> {
   const doc = await store.load();
   const nextRoadmaps = doc.roadmaps.some((r) => r.id === roadmap.id)
     ? doc.roadmaps.map((r) => (r.id === roadmap.id ? roadmap : r))

@@ -39,6 +39,17 @@ let currentClearAllRoadmaps: (() => Promise<Roadmap>) | undefined;
 let currentSelectedNodeId: string | null = null;
 /** Undo/redo transaction history (Phase 6) for the single open roadmap; recreated each time the panel is (re)opened. */
 let currentHistory: RoadmapHistory = new RoadmapHistory();
+let webviewOperationQueue: Promise<void> = Promise.resolve();
+let currentRenderedRoadmapUpdatedAt: string | undefined;
+
+function enqueueWebviewOperation(operation: () => Promise<void>): Promise<void> {
+  const result = webviewOperationQueue.then(operation, operation);
+  webviewOperationQueue = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+}
 
 /**
  * Closes the graph editor without changing any persisted turns or roadmap
@@ -52,6 +63,8 @@ export function disposeGraphWebview(): void {
   currentTurnStore = undefined;
   currentClearAllRoadmaps = undefined;
   currentSelectedNodeId = null;
+  webviewOperationQueue = Promise.resolve();
+  currentRenderedRoadmapUpdatedAt = undefined;
 }
 
 /**
@@ -129,7 +142,15 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri, roadmap: 
 }
 
 /** Pushes the latest roadmap/turns (and undo/redo availability) into an already-open graph panel, if any. */
-function broadcastState(roadmap: Roadmap, turns: TurnRecord[]): void {
+function broadcastState(
+  roadmap: Roadmap,
+  turns: TurnRecord[],
+  resetHistory = false
+): void {
+  if (resetHistory) {
+    currentHistory = new RoadmapHistory();
+  }
+  currentRenderedRoadmapUpdatedAt = roadmap.updatedAt;
   if (currentPanel) {
     const message: HostToWebviewMessage = {
       type: "state",
@@ -150,23 +171,29 @@ function broadcastState(roadmap: Roadmap, turns: TurnRecord[]): void {
  * transcript panel even though the roadmap graph itself only changes once
  * summarization runs.
  */
-export function updateGraph(turns: TurnRecord[]): void {
+export async function updateGraph(turns: TurnRecord[]): Promise<void> {
   if (!currentPanel || !currentRoadmapStore) {
     return;
   }
-  void loadDefaultRoadmap(currentRoadmapStore).then((roadmap) => broadcastState(roadmap, turns));
+  const roadmap = await loadDefaultRoadmap(currentRoadmapStore);
+  broadcastState(roadmap, turns, true);
 }
 
-/** Sends a validation/apply error back to the open Webview as a user-visible banner. */
-function postError(errors: string[]): void {
+/** Sends a host-side operational failure to the graph's existing error banner. */
+export function showGraphError(messageText: string): void {
   if (!currentPanel) {
     return;
   }
   const message: HostToWebviewMessage = {
     type: "error",
-    message: `Roadmap graph could not apply your change: ${errors.join("; ")}`,
+    message: messageText,
   };
   void currentPanel.webview.postMessage(message);
+}
+
+/** Sends a validation/apply error back to the open Webview as a user-visible banner. */
+function postError(errors: string[]): void {
+  showGraphError(`Roadmap graph could not apply your change: ${errors.join("; ")}`);
 }
 
 /**
@@ -197,21 +224,47 @@ async function startResumeInteraction(query: string): Promise<void> {
  * then hands the query to {@link startResumeInteraction}.
  */
 async function performResume(nodeId: string, question: string | undefined): Promise<void> {
-  if (!currentRoadmapStore) {
+  const roadmapStore = currentRoadmapStore;
+  if (!roadmapStore) {
     return;
   }
-  const roadmap = await loadDefaultRoadmap(currentRoadmapStore);
   const turns = currentTurnStore?.getAll() ?? [];
   const turnsById = new Map<string, ResumeSourceTurn>(turns.map((t) => [t.id, t]));
-
-  const result = applyWebviewMessage(roadmap, { type: "resumeFromNode", nodeId, question }, currentHistory);
+  let historyBefore: RoadmapHistory | undefined;
+  let roadmap: Roadmap;
+  let result: ReturnType<typeof applyWebviewMessage>;
+  try {
+    ({ roadmap, result } = await roadmapStore.transaction(async (store) => {
+      const latestRoadmap = await loadDefaultRoadmap(store);
+      if (
+        currentRenderedRoadmapUpdatedAt &&
+        latestRoadmap.updatedAt !== currentRenderedRoadmapUpdatedAt
+      ) {
+        currentHistory = new RoadmapHistory();
+      }
+      historyBefore = currentHistory.clone();
+      const applied = applyWebviewMessage(
+        latestRoadmap,
+        { type: "resumeFromNode", nodeId, question },
+        currentHistory
+      );
+      if (applied.changed) {
+        await saveRoadmap(store, applied.roadmap);
+      }
+      return { roadmap: latestRoadmap, result: applied };
+    }));
+  } catch (error) {
+    if (historyBefore) {
+      currentHistory = historyBefore;
+    }
+    throw error;
+  }
   if (!result.changed) {
     if (result.errors.length > 0) {
       postError(result.errors);
     }
     return;
   }
-  await saveRoadmap(currentRoadmapStore, result.roadmap);
   broadcastState(result.roadmap, turns);
 
   // Build the context/query from the *pre-branch* roadmap (the ancestor path of
@@ -262,6 +315,7 @@ async function confirmAndClearAllRoadmaps(): Promise<void> {
     const roadmap = await currentClearAllRoadmaps();
     currentHistory = new RoadmapHistory();
     currentSelectedNodeId = null;
+    webviewOperationQueue = Promise.resolve();
     broadcastState(roadmap, currentTurnStore?.getAll() ?? []);
     void vscode.window.showInformationMessage(
       "All roadmap graphs were cleared. Captured conversation transcripts were kept."
@@ -287,7 +341,7 @@ export async function showGraphWebview(
   const turns = turnStore.getAll();
 
   if (currentPanel) {
-    broadcastState(roadmap, turns);
+    broadcastState(roadmap, turns, true);
     currentPanel.reveal(vscode.ViewColumn.Beside);
     return currentPanel;
   }
@@ -307,49 +361,81 @@ export async function showGraphWebview(
   // corresponds to anything the user can see.
   currentHistory = new RoadmapHistory();
   currentSelectedNodeId = null;
+  currentRenderedRoadmapUpdatedAt = roadmap.updatedAt;
   panel.webview.html = renderHtml(panel.webview, context.extensionUri, roadmap, turns);
 
   panel.webview.onDidReceiveMessage(
-    async (rawMessage: unknown) => {
+    (rawMessage: unknown) =>
+      enqueueWebviewOperation(async () => {
       // Every message from the Webview is untrusted input (the Webview runs
       // arbitrary script) and must be validated before it can touch
       // persisted state; `applyWebviewMessage` never throws and never
       // mutates `roadmap` in place, so a malformed message can only ever
       // fail to change anything.
-      if (!currentRoadmapStore) {
-        return;
-      }
-
-      // Resume (Phase 7) has a side effect beyond a graph edit - it also opens
-      // a new chat interaction - so it is handled by its own path rather than
-      // the generic apply/persist flow below. Selection is tracked here so the
-      // palette "Resume from Selected Node" command knows its target.
-      const peek = validateWebviewMessage(rawMessage);
-      if (peek.valid && peek.value) {
-        if (peek.value.type === "selectNode") {
-          currentSelectedNodeId = peek.value.nodeId;
-        } else if (peek.value.type === "resumeFromNode") {
-          await performResume(peek.value.nodeId, peek.value.question);
-          return;
-        } else if (peek.value.type === "clearAllRoadmaps") {
-          await confirmAndClearAllRoadmaps();
+      try {
+        if (!currentRoadmapStore) {
           return;
         }
-      }
 
-      const latestRoadmap = await loadDefaultRoadmap(currentRoadmapStore);
-      const result = applyWebviewMessage(latestRoadmap, rawMessage, currentHistory);
-      if (result.changed) {
-        await saveRoadmap(currentRoadmapStore, result.roadmap);
-        broadcastState(result.roadmap, currentTurnStore?.getAll() ?? []);
-      } else if (result.errors.length > 0) {
-        const message: HostToWebviewMessage = {
-          type: "error",
-          message: `Roadmap graph could not apply your change: ${result.errors.join("; ")}`,
-        };
-        void panel.webview.postMessage(message);
+        // Resume (Phase 7) has a side effect beyond a graph edit - it also opens
+        // a new chat interaction - so it is handled by its own path rather than
+        // the generic apply/persist flow below. Selection is tracked here so the
+        // palette "Resume from Selected Node" command knows its target.
+        const peek = validateWebviewMessage(rawMessage);
+        if (peek.valid && peek.value) {
+          if (peek.value.type === "selectNode") {
+            currentSelectedNodeId = peek.value.nodeId;
+          } else if (peek.value.type === "resumeFromNode") {
+            await performResume(peek.value.nodeId, peek.value.question);
+            return;
+          } else if (peek.value.type === "clearAllRoadmaps") {
+            await confirmAndClearAllRoadmaps();
+            return;
+          }
+        }
+
+        const roadmapStore = currentRoadmapStore;
+        let historyBefore: RoadmapHistory | undefined;
+        const result = await roadmapStore.transaction(async (store) => {
+          const latestRoadmap = await loadDefaultRoadmap(store);
+          if (
+            currentRenderedRoadmapUpdatedAt &&
+            latestRoadmap.updatedAt !== currentRenderedRoadmapUpdatedAt
+          ) {
+            currentHistory = new RoadmapHistory();
+          }
+          historyBefore = currentHistory.clone();
+          const applied = applyWebviewMessage(
+            latestRoadmap,
+            rawMessage,
+            currentHistory
+          );
+          if (applied.changed) {
+            await saveRoadmap(store, applied.roadmap);
+          }
+          return applied;
+        }).catch((error) => {
+          if (historyBefore) {
+            currentHistory = historyBefore;
+          }
+          throw error;
+        });
+        if (result.changed) {
+          broadcastState(result.roadmap, currentTurnStore?.getAll() ?? []);
+        } else if (result.errors.length > 0) {
+          showGraphError(
+            `Roadmap graph could not apply your change: ${result.errors.join("; ")}`
+          );
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : `Roadmap graph operation failed: ${String(error)}`;
+        showGraphError(message);
+        void vscode.window.showErrorMessage(message);
       }
-    },
+      }),
     null,
     context.subscriptions
   );
@@ -360,6 +446,7 @@ export async function showGraphWebview(
     currentTurnStore = undefined;
     currentClearAllRoadmaps = undefined;
     currentSelectedNodeId = null;
+    currentRenderedRoadmapUpdatedAt = undefined;
   }, null, context.subscriptions);
 
   currentPanel = panel;

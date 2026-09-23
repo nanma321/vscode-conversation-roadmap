@@ -1,6 +1,6 @@
 # Troubleshooting & Known Limitations
 
-Conversation Roadmap 0.1.3 requires VS Code 1.137 or later. Older versions are
+Conversation Roadmap 0.1.4 requires VS Code 1.137 or later. Older versions are
 blocked at installation because their non-submitting chat-prefill behavior is
 not compatible with this release.
 
@@ -33,6 +33,11 @@ by message and character budgets: the newest coherent exchanges are retained,
 along with the active Resume seed and its response when continuing a branch.
 Buttons, file trees, anchors, metadata, and other non-text response parts are
 not converted into invented prompt text.
+
+When the history budget is reached, the chat shows a progress notice with the
+number of omitted messages and characters. The same request sent to the model
+contains an explicit instruction that content was omitted and must not be
+inferred. This notice is not shown when nothing was compacted.
 
 VS Code's public chat API does not expose an opaque conversation identifier.
 Conversation Roadmap therefore returns its session identifier as JSON-safe
@@ -67,14 +72,47 @@ copies the mention to the clipboard and explains the fallback.
 
 ## A turn was captured but no graph node appeared
 
-- Summarization runs automatically after each captured turn, but a model
-  call can fail (e.g. no authorized language model is available) or the
-  model's response can fail schema validation; in both cases the graph is
-  left unchanged rather than corrupted. The turn itself is still recorded
-  and visible in the transcript view.
+- Summarization runs automatically after each captured turn. A failed model,
+  JSON, schema, or graph-application attempt remains eligible for one later
+  retry. The retry count is persisted, so reloading VS Code cannot create an
+  unbounded model-call loop.
+- After the second failure, Conversation Roadmap persists an **Automatic
+  summary unavailable** node linked to the original source turn. It contains
+  no fabricated summary or classification. VS Code and the open graph show one
+  aggregated warning for the run.
 - Check `conversationRoadmap.showOnboarding`-style settings are not the
   cause: summarization is controlled per-roadmap by the `autoSummarize`
   setting in the graph's own settings, not a global VS Code setting.
+
+## An attached file or selection was not used
+
+- Only references explicitly attached to the current or retained historical
+  `@roadmap` requests are considered. Conversation Roadmap never scans the
+  workspace for extra files.
+- Text, URI, and Location/selection references are supported. Location ranges
+  are applied to the current document; an out-of-date or unreadable selection
+  is reported as unavailable.
+- Each reference and the combined reference context have strict character
+  limits. Current references are retained first, then the newest historical
+  references. Duplicate references are included once.
+- Unsupported and unreadable references produce a single aggregated progress
+  warning and an explicit unavailable marker; their contents are never guessed.
+
+## Storage could not be loaded and writes are blocked
+
+If `turns.json` or `roadmaps.json` is unreadable, malformed, or fails
+validation, Conversation Roadmap stops all mutations for that store. It leaves
+the original bytes untouched and attempts a timestamped
+`*.recovery-<timestamp>.bak` diagnostic copy beside the file.
+It also creates a durable `.blocked` marker and uses an exclusive file lock so
+another VS Code window cannot overwrite the unsafe original.
+
+Use the error's **Open Storage Folder** action, close every VS Code window,
+inspect or restore the named original file, and then reload VS Code. A fresh
+successful load clears the marker. Do not replace the original with the
+diagnostic copy unless you have verified that the copy is valid. If backup or
+marker creation failed, the error reports that separately and writes remain
+blocked.
 
 ## My edits disappeared after a reload
 
@@ -87,7 +125,8 @@ copies the mention to the clipboard and explains the fallback.
 ## I want to remove everything the extension has stored
 
 Run **Conversation Roadmap: Delete All Local Data**. This permanently deletes every
-captured turn and roadmap graph after a confirmation. It cannot be undone.
+captured turn, roadmap graph, and recovery backup after a confirmation. It
+cannot be undone.
 
 ## Exporting a roadmap
 

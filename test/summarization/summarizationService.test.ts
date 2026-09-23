@@ -5,7 +5,10 @@ import * as path from "path";
 import { RoadmapStore } from "../../src/model/roadmapStore";
 import { loadDefaultRoadmap } from "../../src/model/defaultRoadmap";
 import { TurnStore } from "../../src/turnStore";
-import { SummarizationService } from "../../src/summarization/summarizationService";
+import {
+  MAX_SUMMARIZATION_ATTEMPTS,
+  SummarizationService,
+} from "../../src/summarization/summarizationService";
 
 function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "roadmap-summarize-"));
@@ -431,6 +434,355 @@ describe("SummarizationService", () => {
     assert.strictEqual(outcome.changed, false);
     assert.ok(outcome.errors.some((e) => /json/i.test(e)));
     assert.strictEqual(outcome.roadmap.nodes.length, 0);
+    assert.strictEqual(outcome.failures.length, 1);
+    assert.strictEqual(outcome.failures[0].attempt, 1);
+    assert.strictEqual(outcome.failures[0].willRetry, true);
+    assert.strictEqual(turnStore.getAll()[0].summarizationAttempts, 1);
+  });
+
+  it("keeps a transient failure eligible for one bounded later retry", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurn(turnStore, "turn-retry", "design the log analyzer");
+
+    let calls = 0;
+    const service = new SummarizationService(turnStore, roadmapStore, async () => {
+      calls += 1;
+      return calls === 1 ? "temporarily malformed" : topicResponse("turn-retry", "Log analyzer");
+    });
+
+    const first = await service.summarizeNewTurns();
+    assert.strictEqual(first.changed, false);
+    assert.strictEqual(first.failures[0].willRetry, true);
+    assert.strictEqual(first.fallbacks.length, 0);
+
+    const second = await service.summarizeNewTurns();
+    assert.strictEqual(second.changed, true);
+    assert.strictEqual(second.failures.length, 0);
+    assert.strictEqual(second.fallbacks.length, 0);
+    assert.ok(
+      second.roadmap.nodes.some((node) =>
+        node.sourceRefs.some((reference) => reference.turnId === "turn-retry")
+      )
+    );
+
+    await service.summarizeNewTurns();
+    assert.strictEqual(calls, MAX_SUMMARIZATION_ATTEMPTS);
+  });
+
+  it("reserves the bounded attempt before invoking the model", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurn(turnStore, "turn-reserved", "reserve before request");
+
+    const service = new SummarizationService(turnStore, roadmapStore, async () => {
+      assert.strictEqual(
+        turnStore.getAll().find((turn) => turn.id === "turn-reserved")
+          ?.summarizationAttempts,
+        1
+      );
+      return topicResponse("turn-reserved");
+    });
+    await service.summarizeNewTurns();
+  });
+
+  it("persists a deterministic source-linked fallback after retries are exhausted", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurn(turnStore, "turn-fallback", "analyze this log");
+
+    let calls = 0;
+    const firstService = new SummarizationService(turnStore, roadmapStore, async () => {
+      calls += 1;
+      return "{ invalid";
+    });
+    const first = await firstService.summarizeNewTurns();
+    assert.strictEqual(first.changed, false);
+    assert.strictEqual(first.fallbacks.length, 0);
+
+    // Recreate the service to prove the retry count survives extension reload.
+    const reloadedTurns = new TurnStore(dir);
+    const reloadedRoadmaps = new RoadmapStore(dir);
+    await reloadedTurns.load();
+    await reloadedRoadmaps.load();
+    const secondService = new SummarizationService(
+      reloadedTurns,
+      reloadedRoadmaps,
+      async () => {
+        calls += 1;
+        return "{ still invalid";
+      }
+    );
+    const second = await secondService.summarizeNewTurns();
+
+    assert.strictEqual(calls, MAX_SUMMARIZATION_ATTEMPTS);
+    assert.strictEqual(second.changed, true);
+    assert.strictEqual(second.failures[0].willRetry, false);
+    assert.strictEqual(second.fallbacks.length, 1);
+    assert.strictEqual(second.fallbacks[0].turnId, "turn-fallback");
+    const fallback = second.roadmap.nodes.find(
+      (node) => node.id === second.fallbacks[0].nodeId
+    );
+    assert.ok(fallback);
+    assert.strictEqual(fallback!.title, "Automatic summary unavailable");
+    assert.ok(/failed after 2 attempts/i.test(fallback!.summary));
+    assert.deepStrictEqual(fallback!.sourceRefs, [
+      { turnId: "turn-fallback", sessionId: "session-1" },
+    ]);
+    assert.ok(!fallback!.summary.includes("analyze this log"));
+
+    const persisted = await loadDefaultRoadmap(new RoadmapStore(dir));
+    assert.ok(persisted.nodes.some((node) => node.id === fallback!.id));
+    await secondService.summarizeNewTurns();
+    assert.strictEqual(calls, MAX_SUMMARIZATION_ATTEMPTS);
+  });
+
+  it("honors retry reservations written by another VS Code window", async () => {
+    const dir = makeTempDir();
+    const firstTurns = new TurnStore(dir);
+    const firstRoadmaps = new RoadmapStore(dir);
+    await firstTurns.load();
+    await firstRoadmaps.load();
+    await seedTurn(firstTurns, "turn-shared", "shared failed summary");
+
+    const secondTurns = new TurnStore(dir);
+    const secondRoadmaps = new RoadmapStore(dir);
+    await secondTurns.load();
+    await secondRoadmaps.load();
+    let calls = 0;
+    const firstService = new SummarizationService(
+      firstTurns,
+      firstRoadmaps,
+      async () => {
+        calls += 1;
+        return "invalid first response";
+      }
+    );
+    const secondService = new SummarizationService(
+      secondTurns,
+      secondRoadmaps,
+      async () => {
+        calls += 1;
+        return "invalid second response";
+      }
+    );
+
+    await firstService.summarizeNewTurns();
+    const second = await secondService.summarizeNewTurns();
+
+    assert.strictEqual(calls, MAX_SUMMARIZATION_ATTEMPTS);
+    assert.strictEqual(second.fallbacks.length, 1);
+    assert.strictEqual(second.fallbacks[0].turnId, "turn-shared");
+  });
+
+  it("isolates success and retry state across multiple sessions", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurnInSession(turnStore, "turn-a", "session-a", "successful turn");
+    await seedTurnInSession(turnStore, "turn-b", "session-b", "transient failure");
+
+    const callsBySession = new Map<string, number>();
+    const service = new SummarizationService(turnStore, roadmapStore, async (prompt) => {
+      const turnId = prompt.includes("turn-a") ? "turn-a" : "turn-b";
+      const sessionId = turnId === "turn-a" ? "session-a" : "session-b";
+      callsBySession.set(sessionId, (callsBySession.get(sessionId) ?? 0) + 1);
+      if (sessionId === "session-b" && callsBySession.get(sessionId) === 1) {
+        throw new Error("temporary model outage");
+      }
+      return topicResponse(turnId, sessionId);
+    });
+
+    const first = await service.summarizeNewTurns();
+    assert.strictEqual(first.changed, true);
+    assert.deepStrictEqual(first.failures.map((failure) => failure.sessionId), [
+      "session-b",
+    ]);
+    assert.ok(
+      first.roadmap.nodes.some((node) =>
+        node.sourceRefs.some((reference) => reference.turnId === "turn-a")
+      )
+    );
+    assert.ok(
+      !first.roadmap.nodes.some((node) =>
+        node.sourceRefs.some((reference) => reference.turnId === "turn-b")
+      )
+    );
+
+    const second = await service.summarizeNewTurns();
+    assert.strictEqual(second.failures.length, 0);
+    assert.ok(
+      second.roadmap.nodes.some((node) =>
+        node.sourceRefs.some((reference) => reference.turnId === "turn-b")
+      )
+    );
+    assert.strictEqual(callsBySession.get("session-a"), 1);
+    assert.strictEqual(callsBySession.get("session-b"), 2);
+  });
+
+  it("rejects a model target from another chat session", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurnInSession(turnStore, "turn-a", "session-a", "first chat");
+
+    const serviceA = new SummarizationService(
+      turnStore,
+      roadmapStore,
+      async () => topicResponse("turn-a", "Session A")
+    );
+    const first = await serviceA.summarizeNewTurns();
+    const sessionANode = first.roadmap.nodes.find((node) =>
+      node.sourceRefs.some((reference) => reference.turnId === "turn-a")
+    );
+    assert.ok(sessionANode);
+
+    await seedTurnInSession(turnStore, "turn-b", "session-b", "second chat");
+    const serviceB = new SummarizationService(turnStore, roadmapStore, async () =>
+      JSON.stringify({
+        schemaVersion: 1,
+        nodes: [
+          {
+            localId: "malicious-cross-session",
+            kind: "topic",
+            title: "Wrong continuation",
+            summary: "Must not cross sessions",
+            sourceTurnIds: ["turn-b"],
+            relation: "continue",
+            targetNodeId: sessionANode!.id,
+          },
+        ],
+      })
+    );
+    const outcome = await serviceB.summarizeNewTurns();
+
+    assert.strictEqual(outcome.changed, false);
+    assert.strictEqual(outcome.failures[0].stage, "schema");
+    assert.ok(outcome.errors.some((error) => /outside the current chat session/.test(error)));
+    const unchanged = outcome.roadmap.nodes.find((node) => node.id === sessionANode!.id);
+    assert.deepStrictEqual(unchanged!.sourceRefs, [
+      { turnId: "turn-a", sessionId: "session-a" },
+    ]);
+    assert.ok(
+      !outcome.roadmap.edges.some(
+        (edge) => edge.source === sessionANode!.id && edge.target !== sessionANode!.id
+      )
+    );
+  });
+
+  it("rejects a response-local id that collides with another session node", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurnInSession(turnStore, "turn-a", "session-a", "first chat");
+    const first = await new SummarizationService(
+      turnStore,
+      roadmapStore,
+      async () => topicResponse("turn-a", "Session A")
+    ).summarizeNewTurns();
+    const sessionANode = first.roadmap.nodes.find((node) =>
+      node.sourceRefs.some((reference) => reference.turnId === "turn-a")
+    );
+    assert.ok(sessionANode);
+
+    await seedTurnInSession(turnStore, "turn-b", "session-b", "second chat");
+    const outcome = await new SummarizationService(
+      turnStore,
+      roadmapStore,
+      async () =>
+        JSON.stringify({
+          schemaVersion: 1,
+          nodes: [
+            {
+              localId: sessionANode!.id,
+              kind: "topic",
+              title: "Colliding local node",
+              summary: "Must be rejected",
+              sourceTurnIds: ["turn-b"],
+              relation: "topic",
+            },
+            {
+              localId: "child",
+              kind: "topic",
+              title: "Colliding child",
+              summary: "Must not target another session",
+              sourceTurnIds: ["turn-b"],
+              relation: "branch",
+              targetNodeId: sessionANode!.id,
+            },
+          ],
+        })
+    ).summarizeNewTurns();
+
+    assert.strictEqual(outcome.changed, false);
+    assert.ok(outcome.errors.some((error) => /collides with an existing/.test(error)));
+    assert.deepStrictEqual(
+      outcome.roadmap.nodes.find((node) => node.id === sessionANode!.id)!.sourceRefs,
+      [{ turnId: "turn-a", sessionId: "session-a" }]
+    );
+  });
+
+  it("serializes Webview-style graph edits behind an in-flight summary", async () => {
+    const dir = makeTempDir();
+    const turnStore = new TurnStore(dir);
+    const roadmapStore = new RoadmapStore(dir);
+    await turnStore.load();
+    await roadmapStore.load();
+    await seedTurn(turnStore, "turn-1", "long model request");
+
+    let releaseModel: (() => void) | undefined;
+    let modelStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      modelStarted = resolve;
+    });
+    const service = new SummarizationService(turnStore, roadmapStore, async () => {
+      modelStarted?.();
+      await new Promise<void>((resolve) => {
+        releaseModel = resolve;
+      });
+      return topicResponse("turn-1", "Summarized");
+    });
+
+    const summary = service.summarizeNewTurns();
+    await started;
+    let editFinished = false;
+    const edit = (async () => {
+      const roadmap = await loadDefaultRoadmap(roadmapStore);
+      roadmap.title = "User title changed during summary";
+      await roadmapStore.save({
+        version: 1,
+        roadmaps: [roadmap],
+      });
+      editFinished = true;
+    })();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.strictEqual(editFinished, false);
+
+    releaseModel?.();
+    await summary;
+    await edit;
+    const persisted = await loadDefaultRoadmap(new RoadmapStore(dir));
+    assert.strictEqual(persisted.title, "User title changed during summary");
+    assert.ok(
+      persisted.nodes.some((node) =>
+        node.sourceRefs.some((reference) => reference.turnId === "turn-1")
+      )
+    );
   });
 
   it("tolerates a model response wrapped in a Markdown code fence", async () => {

@@ -15,23 +15,53 @@
  *   - invalid or malformed model output leaves the roadmap unchanged, and
  *   - user-authored fields are never overwritten.
  * It additionally guarantees only one summarization runs at a time (concurrent
- * requests are chained), that a turn is attempted at most once (so a turn the
- * model chooses not to reference does not trigger repeated work), and that each
- * chat session is summarized against only its own existing nodes so a new chat
- * starts its own sub-graph instead of being linked onto an earlier session.
+ * requests are chained), that failed turns receive at most a small bounded
+ * number of model attempts before a deterministic fallback is persisted, and
+ * that each chat session is summarized against only its own existing nodes so
+ * a new chat starts its own sub-graph instead of being linked onto an earlier
+ * session.
  */
-import { RoadmapStore } from "../model/roadmapStore";
+import { RoadmapStore, RoadmapStoreAccess } from "../model/roadmapStore";
 import { loadDefaultRoadmap, saveRoadmap } from "../model/defaultRoadmap";
-import { Roadmap, Turn } from "../model/types";
+import { Roadmap, RoadmapNode, Turn } from "../model/types";
 import type { TurnStore, TurnRecord } from "../turnStore";
 import { buildSummarizationPrompt } from "./prompt";
 import { summarizeIncrementally, SummarizationResult } from "./applySummary";
 import { buildQuestionBackfill, ensureQuestionNodes } from "./ensureQuestionNodes";
-import { validateModelSummaryResponse } from "./summaryResponseSchema";
+import {
+  ModelSummaryResponse,
+  validateModelSummaryResponse,
+} from "./summaryResponseSchema";
 import { attachResumeTurns } from "./resumeAttachment";
 
 /** Signature of the injected model call: takes the prompt, returns the model's raw text response. */
 export type RequestSummary = (prompt: string) => Promise<string>;
+
+/** One initial model call plus one later retry before deterministic fallback. */
+export const MAX_SUMMARIZATION_ATTEMPTS = 2;
+
+export type SummarizationFailureStage =
+  | "request"
+  | "json"
+  | "schema"
+  | "apply";
+
+export interface SummarizationFailureDetail {
+  sessionId: string;
+  turnIds: string[];
+  attempt: number;
+  maxAttempts: number;
+  stage: SummarizationFailureStage;
+  message: string;
+  willRetry: boolean;
+}
+
+export interface SummarizationFallbackDetail {
+  sessionId: string;
+  turnId: string;
+  nodeId: string;
+  reason: string;
+}
 
 /** Outcome of a summarization attempt. */
 export interface SummarizeOutcome {
@@ -41,6 +71,10 @@ export interface SummarizeOutcome {
   roadmap: Roadmap;
   /** Validation/parse errors, if any. */
   errors: string[];
+  /** Structured model/validation failures from this run. */
+  failures: SummarizationFailureDetail[];
+  /** Source-linked fallback nodes created after retry exhaustion. */
+  fallbacks: SummarizationFallbackDetail[];
 }
 
 /** Strips a leading/trailing Markdown code fence the model may wrap its JSON in, then parses. Returns undefined on failure. */
@@ -108,11 +142,115 @@ function sessionScopedRoadmap(
   return { ...roadmap, nodes, edges };
 }
 
+function referencedTurnIds(roadmap: Roadmap): Set<string> {
+  return new Set(
+    roadmap.nodes.flatMap((node) => node.sourceRefs.map((reference) => reference.turnId))
+  );
+}
+
+function validateSessionTargets(
+  response: ModelSummaryResponse,
+  scopedRoadmap: Roadmap,
+  fullRoadmap: Roadmap
+): string[] {
+  const allowedTargets = new Set(scopedRoadmap.nodes.map((node) => node.id));
+  const allExistingNodeIds = new Set(fullRoadmap.nodes.map((node) => node.id));
+  const earlierLocalIds = new Set<string>();
+  const errors: string[] = [];
+  response.nodes.forEach((node, index) => {
+    if (allExistingNodeIds.has(node.localId)) {
+      errors.push(
+        `response.nodes[${index}].localId: "${node.localId}" collides with an existing roadmap node id`
+      );
+    }
+    if (
+      node.targetNodeId &&
+      !allowedTargets.has(node.targetNodeId) &&
+      !earlierLocalIds.has(node.targetNodeId)
+    ) {
+      errors.push(
+        `response.nodes[${index}].targetNodeId: "${node.targetNodeId}" is outside the current chat session`
+      );
+    }
+    earlierLocalIds.add(node.localId);
+  });
+  return errors;
+}
+
+function fallbackNodeId(roadmap: Roadmap, turnId: string): string {
+  const safeTurnId = turnId.replace(/[^A-Za-z0-9._:-]/g, "-");
+  const base = `fallback-${safeTurnId}`;
+  const used = new Set(roadmap.nodes.map((node) => node.id));
+  if (!used.has(base)) {
+    return base;
+  }
+  let suffix = 2;
+  while (used.has(`${base}-${suffix}`)) {
+    suffix += 1;
+  }
+  return `${base}-${suffix}`;
+}
+
+function addFallbackNode(
+  roadmap: Roadmap,
+  turn: TurnRecord,
+  reason: string
+): { roadmap: Roadmap; detail: SummarizationFallbackDetail } {
+  const nodeId = fallbackNodeId(roadmap, turn.id);
+  const timestamp = turn.timestamp || new Date().toISOString();
+  const node: RoadmapNode = {
+    id: nodeId,
+    title: "Automatic summary unavailable",
+    summary:
+      `Automatic summarization failed after ${MAX_SUMMARIZATION_ATTEMPTS} attempts. ` +
+      "Review the linked source turn for the original request and response.",
+    status: "open",
+    tags: [],
+    notes: "",
+    sourceRefs: [{ turnId: turn.id, sessionId: turn.sessionId }],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    isNew: true,
+  };
+  return {
+    roadmap: {
+      ...roadmap,
+      nodes: [
+        ...roadmap.nodes.map((existing) =>
+          existing.isNew ? { ...existing, isNew: false } : existing
+        ),
+        node,
+      ],
+      updatedAt: timestamp,
+    },
+    detail: {
+      sessionId: turn.sessionId,
+      turnId: turn.id,
+      nodeId,
+      reason,
+    },
+  };
+}
+
+function emptyOutcome(roadmap: Roadmap): SummarizeOutcome {
+  return {
+    changed: false,
+    roadmap,
+    errors: [],
+    failures: [],
+    fallbacks: [],
+  };
+}
+
 export class SummarizationService {
-  /** Ids of turns already sent to the summarizer, so each turn is attempted at most once. */
-  private readonly attemptedTurnIds = new Set<string>();
   /** Serializes summarization runs so overlapping captures cannot race on the roadmap document. */
-  private queue: Promise<SummarizeOutcome> = Promise.resolve({ changed: false, roadmap: undefined as unknown as Roadmap, errors: [] });
+  private queue: Promise<SummarizeOutcome> = Promise.resolve({
+    changed: false,
+    roadmap: undefined as unknown as Roadmap,
+    errors: [],
+    failures: [],
+    fallbacks: [],
+  });
 
   constructor(
     private readonly turnStore: TurnStore,
@@ -135,17 +273,21 @@ export class SummarizationService {
 
   /** Repairs existing collapsed questions without invoking the language model. */
   backfillExistingQuestions(): Promise<SummarizeOutcome> {
-    const backfill = async (): Promise<SummarizeOutcome> => {
-      const roadmap = await loadDefaultRoadmap(this.roadmapStore);
-      if (!roadmap.settings.autoSummarize) {
-        return { changed: false, roadmap, errors: [] };
-      }
-      const outcome = this.applyQuestionBackfill(roadmap, this.turnStore.getAll());
-      if (outcome.changed) {
-        await saveRoadmap(this.roadmapStore, outcome.roadmap);
-      }
-      return outcome;
-    };
+    const backfill = (): Promise<SummarizeOutcome> =>
+      this.roadmapStore.transaction(async (store) => {
+        const roadmap = await loadDefaultRoadmap(store);
+        if (!roadmap.settings.autoSummarize) {
+          return emptyOutcome(roadmap);
+        }
+        const outcome = this.applyQuestionBackfill(
+          roadmap,
+          this.turnStore.getAll()
+        );
+        if (outcome.changed) {
+          await saveRoadmap(store, outcome.roadmap);
+        }
+        return outcome;
+      });
     this.queue = this.queue.then(backfill, backfill);
     return this.queue;
   }
@@ -158,61 +300,86 @@ export class SummarizationService {
   clearAllRoadmaps(): Promise<Roadmap> {
     const clear = async (): Promise<SummarizeOutcome> => {
       await this.turnStore.excludeAllFromRoadmap();
-      await this.roadmapStore.deleteAll();
-      this.attemptedTurnIds.clear();
-      const roadmap = await loadDefaultRoadmap(this.roadmapStore);
-      return { changed: true, roadmap, errors: [] };
+      return this.roadmapStore.transaction(async (store) => {
+        await store.deleteAll();
+        const roadmap = await loadDefaultRoadmap(store);
+        return { ...emptyOutcome(roadmap), changed: true };
+      });
     };
     this.queue = this.queue.then(clear, clear);
     return this.queue.then((outcome) => outcome.roadmap);
   }
 
-  private async runOnce(): Promise<SummarizeOutcome> {
-    const roadmap = await loadDefaultRoadmap(this.roadmapStore);
+  private runOnce(): Promise<SummarizeOutcome> {
+    return this.roadmapStore.transaction((store) =>
+      this.runOnceInTransaction(store)
+    );
+  }
+
+  private async runOnceInTransaction(
+    roadmapStore: RoadmapStoreAccess
+  ): Promise<SummarizeOutcome> {
+    const roadmap = await loadDefaultRoadmap(roadmapStore);
 
     // Respect the user's per-roadmap preference; if auto-summarize is off, do
     // nothing (the user can still build the graph via manual edits/import).
     if (!roadmap.settings.autoSummarize) {
-      return { changed: false, roadmap, errors: [] };
+      return emptyOutcome(roadmap);
     }
 
+    // Refresh under the roadmap transaction so another VS Code window's
+    // appended turns and persisted retry reservations are observed before a
+    // new model call is considered.
+    await this.turnStore.load();
     const allTurns = this.turnStore.getAll();
     const backfill = this.applyQuestionBackfill(roadmap, allTurns);
     let currentRoadmap = backfill.roadmap;
     let changedAny = backfill.changed;
     const errors: string[] = [...backfill.errors];
+    const failures: SummarizationFailureDetail[] = [];
+    const fallbacks: SummarizationFallbackDetail[] = [];
     const domainTurns = toTurnsWithResumeAffinity(allTurns);
     const domainTurnsById = new Map(domainTurns.map((turn) => [turn.id, turn]));
 
-    // A turn is "already summarized" if any node already references it; combine
-    // that with the in-memory attempted set so we neither re-summarize nor
-    // repeatedly retry a turn the model chose not to use.
-    const referenced = new Set<string>();
-    for (const node of currentRoadmap.nodes) {
-      for (const ref of node.sourceRefs) {
-        referenced.add(ref.turnId);
-      }
-    }
-
-    const pending = allTurns.filter(
+    const referenced = referencedTurnIds(currentRoadmap);
+    const unrepresented = allTurns.filter(
       (t) =>
         t.completed &&
         !t.roadmapExcluded &&
-        !referenced.has(t.id) &&
-        !this.attemptedTurnIds.has(t.id)
+        !referenced.has(t.id)
     );
-    if (pending.length === 0) {
+    if (unrepresented.length === 0) {
       if (changedAny) {
-        await saveRoadmap(this.roadmapStore, currentRoadmap);
+        await saveRoadmap(roadmapStore, currentRoadmap);
       }
-      return { changed: changedAny, roadmap: currentRoadmap, errors };
+      return {
+        changed: changedAny,
+        roadmap: currentRoadmap,
+        errors,
+        failures,
+        fallbacks,
+      };
     }
 
-    // Mark attempted up front so a failure or a model no-op doesn't cause this
-    // same batch to be retried on every subsequent capture.
-    for (const t of pending) {
-      this.attemptedTurnIds.add(t.id);
+    // A prior run may have spent the final attempt but failed before the graph
+    // could be saved. Repair those turns without another model call.
+    for (const turn of unrepresented.filter(
+      (candidate) =>
+        (candidate.summarizationAttempts ?? 0) >= MAX_SUMMARIZATION_ATTEMPTS
+    )) {
+      const fallback = addFallbackNode(
+        currentRoadmap,
+        turn,
+        "The persisted summarization retry limit had already been reached."
+      );
+      currentRoadmap = fallback.roadmap;
+      fallbacks.push(fallback.detail);
+      changedAny = true;
     }
+
+    const pending = unrepresented.filter(
+      (turn) => (turn.summarizationAttempts ?? 0) < MAX_SUMMARIZATION_ATTEMPTS
+    );
 
     // Summarize one session at a time. Each session's prompt is given only the
     // nodes from that *same* session as existing context, so a new chat starts
@@ -233,49 +400,151 @@ export class SummarizationService {
       );
       const prompt = buildSummarizationPrompt(sessionTurns, scopedRoadmap);
 
-      let rawResponse: string;
+      const nextAttempts = new Map(
+        sessionTurns.map((turn) => [
+          turn.id,
+          (allTurns.find((candidate) => candidate.id === turn.id)
+            ?.summarizationAttempts ?? 0) + 1,
+        ])
+      );
+      // Reserve every attempt durably before the model call. The reservation
+      // is not a completion marker: the turn remains pending until a graph
+      // node or fallback is persisted.
+      await this.turnStore.setSummarizationAttempts(nextAttempts);
+
+      let rawResponse: string | undefined;
+      let failureStage: SummarizationFailureStage | undefined;
+      let failureMessage: string | undefined;
       try {
         rawResponse = await this.requestSummary(prompt);
       } catch (err) {
-        errors.push(`summarization request failed for ${sessionId}: ${(err as Error).message}`);
+        failureStage = "request";
+        failureMessage = `summarization request failed for ${sessionId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`;
+      }
+
+      if (!failureStage) {
+        const parsed = parseModelJson(rawResponse as string);
+        if (parsed === undefined) {
+          failureStage = "json";
+          failureMessage = `summarization response for ${sessionId} was not valid JSON`;
+        } else {
+          const validation = validateModelSummaryResponse(
+            parsed,
+            new Set(sessionTurns.map((turn) => turn.id))
+          );
+          if (!validation.valid || !validation.value) {
+            failureStage = "schema";
+            failureMessage = validation.errors.join("; ");
+          } else {
+            const response = ensureQuestionNodes(
+              attachResumeTurns(validation.value, sessionTurns, currentRoadmap),
+              sessionTurns,
+              scopedRoadmap,
+              domainTurns
+            );
+            const targetErrors = validateSessionTargets(
+              response,
+              scopedRoadmap,
+              currentRoadmap
+            );
+            if (targetErrors.length > 0) {
+              failureStage = "schema";
+              failureMessage = targetErrors.join("; ");
+            } else {
+              const result: SummarizationResult = summarizeIncrementally(
+                currentRoadmap,
+                response,
+                sessionTurns
+              );
+              if (result.changed) {
+                currentRoadmap = result.roadmap;
+                changedAny = true;
+              } else {
+                failureStage = "apply";
+                failureMessage =
+                  result.errors.join("; ") ||
+                  `summarization response for ${sessionId} did not update the roadmap`;
+              }
+            }
+          }
+        }
+      }
+
+      const representedAfterAttempt = referencedTurnIds(currentRoadmap);
+      const missingTurns = sessionTurns.filter(
+        (turn) => !representedAfterAttempt.has(turn.id)
+      );
+      if (missingTurns.length > 0 && !failureStage) {
+        failureStage = "apply";
+        failureMessage =
+          `summarization response for ${sessionId} omitted ` +
+          `${missingTurns.length} completed turn(s)`;
+      }
+      if (missingTurns.length === 0) {
         continue;
       }
 
-      const parsed = parseModelJson(rawResponse);
-      if (parsed === undefined) {
-        errors.push(`summarization response for ${sessionId} was not valid JSON`);
-        continue;
+      const detailMessage =
+        failureMessage ?? `summarization failed for ${sessionId}`;
+      errors.push(detailMessage);
+      const turnsByAttempt = new Map<number, Turn[]>();
+      for (const turn of missingTurns) {
+        const attempt = nextAttempts.get(turn.id) ?? 1;
+        const sameAttempt = turnsByAttempt.get(attempt) ?? [];
+        sameAttempt.push(turn);
+        turnsByAttempt.set(attempt, sameAttempt);
       }
 
-      const validation = validateModelSummaryResponse(
-        parsed,
-        new Set(sessionTurns.map((turn) => turn.id))
-      );
-      if (!validation.valid || !validation.value) {
-        errors.push(...validation.errors);
-        continue;
-      }
-      const response = ensureQuestionNodes(
-        attachResumeTurns(validation.value, sessionTurns, currentRoadmap),
-        sessionTurns,
-        scopedRoadmap,
-        domainTurns
-      );
-      const result: SummarizationResult = summarizeIncrementally(currentRoadmap, response, sessionTurns);
-      if (result.changed) {
-        currentRoadmap = result.roadmap;
-        changedAny = true;
-      } else {
-        errors.push(...result.errors);
+      for (const [attempt, failedTurns] of turnsByAttempt) {
+        const willRetry = attempt < MAX_SUMMARIZATION_ATTEMPTS;
+        failures.push({
+          sessionId,
+          turnIds: failedTurns.map((turn) => turn.id),
+          attempt,
+          maxAttempts: MAX_SUMMARIZATION_ATTEMPTS,
+          stage: failureStage ?? "apply",
+          message: detailMessage,
+          willRetry,
+        });
+        if (!willRetry) {
+          for (const failedTurn of failedTurns) {
+            const sourceTurn = allTurns.find((turn) => turn.id === failedTurn.id);
+            if (!sourceTurn) {
+              continue;
+            }
+            const fallback = addFallbackNode(
+              currentRoadmap,
+              sourceTurn,
+              detailMessage
+            );
+            currentRoadmap = fallback.roadmap;
+            fallbacks.push(fallback.detail);
+            changedAny = true;
+          }
+        }
       }
     }
 
     if (!changedAny) {
-      return { changed: false, roadmap: currentRoadmap, errors };
+      return {
+        changed: false,
+        roadmap: currentRoadmap,
+        errors,
+        failures,
+        fallbacks,
+      };
     }
 
-    await saveRoadmap(this.roadmapStore, currentRoadmap);
-    return { changed: true, roadmap: currentRoadmap, errors };
+    await saveRoadmap(roadmapStore, currentRoadmap);
+    return {
+      changed: true,
+      roadmap: currentRoadmap,
+      errors,
+      failures,
+      fallbacks,
+    };
   }
 
   private applyQuestionBackfill(
@@ -322,7 +591,13 @@ export class SummarizationService {
       }
     }
 
-    return { changed, roadmap: currentRoadmap, errors };
+    return {
+      changed,
+      roadmap: currentRoadmap,
+      errors,
+      failures: [],
+      fallbacks: [],
+    };
   }
 
   /** The distinct session ids present in `turns`, in first-appearance order. */

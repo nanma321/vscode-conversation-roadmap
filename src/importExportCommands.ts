@@ -63,9 +63,12 @@ export async function importRoadmapCommand(roadmapStore: RoadmapStore): Promise<
     return;
   }
 
-  const existing = await roadmapStore.load();
-  const plan = planImport(existing, parsed.document);
-  await roadmapStore.save(plan.document);
+  const plan = await roadmapStore.transaction(async (store) => {
+    const existing = await store.load();
+    const importPlan = planImport(existing, parsed.document!);
+    await store.save(importPlan.document);
+    return importPlan;
+  });
 
   if (plan.conflicts.length > 0) {
     const details = plan.conflicts.map((c) => `"${c.originalId}" -> imported as "${c.importedAsId}"`).join("; ");

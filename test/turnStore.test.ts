@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { TurnStore, TurnRecord } from "../src/turnStore";
+import { StorageBlockedError } from "../src/storageRecovery";
 
 function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "roadmap-turnstore-"));
@@ -96,6 +97,112 @@ describe("TurnStore", () => {
     const parsed = JSON.parse(raw);
     assert.strictEqual(parsed.version, 1);
     assert.strictEqual(parsed.turns.length, 1);
+  });
+
+  it("blocks writes and preserves corrupt transcript storage byte-for-byte", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "turns.json");
+    const corruptBytes = Buffer.from("{ definitely not valid transcript json", "utf8");
+    fs.writeFileSync(filePath, corruptBytes);
+    const store = new TurnStore(dir, {
+      now: () => new Date("2026-09-23T12:34:56.789Z"),
+    });
+
+    await assert.rejects(() => store.load(), StorageBlockedError);
+    await assert.rejects(() => store.append(sampleTurn()), StorageBlockedError);
+
+    assert.deepStrictEqual(fs.readFileSync(filePath), corruptBytes);
+    const backupPath = `${filePath}.recovery-2026-09-23T12-34-56-789Z.bak`;
+    assert.deepStrictEqual(fs.readFileSync(backupPath), corruptBytes);
+  });
+
+  it("keeps a blocked instance closed while a fresh instance can load a repaired file", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "turns.json");
+    fs.writeFileSync(filePath, "not-json", "utf8");
+    const blocked = new TurnStore(dir);
+    await assert.rejects(() => blocked.load(), StorageBlockedError);
+
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ version: 1, turns: [sampleTurn({ id: "recovered" })] }),
+      "utf8"
+    );
+    await assert.rejects(() => blocked.append(sampleTurn({ id: "must-not-write" })), StorageBlockedError);
+
+    const recovered = new TurnStore(dir);
+    const turns = await recovered.load();
+    assert.deepStrictEqual(turns.map((turn) => turn.id), ["recovered"]);
+  });
+
+  it("surfaces backup creation failures and remains blocked", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "turns.json");
+    fs.writeFileSync(filePath, "{broken", "utf8");
+    const store = new TurnStore(dir, {
+      copyFile: async () => {
+        throw new Error("backup destination is read-only");
+      },
+    });
+
+    await assert.rejects(
+      () => store.load(),
+      (error: unknown) =>
+        error instanceof StorageBlockedError &&
+        error.backupError instanceof Error &&
+        /backup destination is read-only/.test(error.message)
+    );
+    await assert.rejects(() => store.excludeAllFromRoadmap(), StorageBlockedError);
+    assert.strictEqual(fs.readFileSync(filePath, "utf8"), "{broken");
+  });
+
+  it("blocks concurrent writes while the recovery backup is still pending", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "turns.json");
+    const original = Buffer.from("{broken-concurrent", "utf8");
+    fs.writeFileSync(filePath, original);
+    let releaseBackup: (() => void) | undefined;
+    let backupStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      backupStarted = resolve;
+    });
+    const store = new TurnStore(dir, {
+      copyFile: async (source, destination) => {
+        backupStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseBackup = resolve;
+        });
+        await fs.promises.copyFile(source, destination);
+      },
+    });
+
+    const load = store.load();
+    await started;
+    const append = store.append(sampleTurn());
+    assert.deepStrictEqual(fs.readFileSync(filePath), original);
+    releaseBackup?.();
+    await assert.rejects(() => load, StorageBlockedError);
+    await assert.rejects(() => append, StorageBlockedError);
+  });
+
+  it("uses a durable marker to block another loaded store instance", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "turns.json");
+    const firstWindow = new TurnStore(dir);
+    await firstWindow.load();
+    await firstWindow.append(sampleTurn({ id: "before-corruption" }));
+
+    const corruptBytes = Buffer.from("{cross-window-corruption", "utf8");
+    fs.writeFileSync(filePath, corruptBytes);
+    const detectingWindow = new TurnStore(dir);
+    await assert.rejects(() => detectingWindow.load(), StorageBlockedError);
+    assert.ok(fs.existsSync(`${filePath}.blocked`));
+
+    await assert.rejects(
+      () => firstWindow.append(sampleTurn({ id: "must-not-overwrite" })),
+      StorageBlockedError
+    );
+    assert.deepStrictEqual(fs.readFileSync(filePath), corruptBytes);
   });
 
   it("notifies onDidChange listeners with the latest turns when a turn is appended", async () => {
@@ -196,6 +303,58 @@ describe("TurnStore", () => {
     ]);
   });
 
+  it("persists summarization attempt counts without emitting a transcript change", async () => {
+    const dir = makeTempDir();
+    const store = new TurnStore(dir);
+    await store.load();
+    await store.append(sampleTurn({ id: "turn-attempted" }));
+    let changes = 0;
+    store.onDidChange(() => {
+      changes += 1;
+    });
+
+    await store.setSummarizationAttempts(new Map([["turn-attempted", 1]]));
+
+    assert.strictEqual(changes, 0);
+    assert.strictEqual(store.getAll()[0].summarizationAttempts, 1);
+    const reloaded = await new TurnStore(dir).load();
+    assert.strictEqual(reloaded[0].summarizationAttempts, 1);
+  });
+
+  it("serializes appends with summarization attempt updates without losing either", async () => {
+    const dir = makeTempDir();
+    const store = new TurnStore(dir);
+    await store.load();
+    await store.append(sampleTurn({ id: "turn-1" }));
+
+    await Promise.all([
+      store.append(sampleTurn({ id: "turn-2" })),
+      store.setSummarizationAttempts(new Map([["turn-1", 1]])),
+    ]);
+
+    const turns = store.getAll();
+    assert.deepStrictEqual(turns.map((turn) => turn.id), ["turn-1", "turn-2"]);
+    assert.strictEqual(turns[0].summarizationAttempts, 1);
+    assert.strictEqual((await new TurnStore(dir).load()).length, 2);
+  });
+
+  it("reloads the latest transcript under the file lock before cross-window mutations", async () => {
+    const dir = makeTempDir();
+    const firstWindow = new TurnStore(dir);
+    const secondWindow = new TurnStore(dir);
+    await firstWindow.load();
+    await secondWindow.load();
+
+    await firstWindow.append(sampleTurn({ id: "turn-from-first" }));
+    await secondWindow.append(sampleTurn({ id: "turn-from-second" }));
+
+    const persisted = await new TurnStore(dir).load();
+    assert.deepStrictEqual(
+      persisted.map((turn) => turn.id),
+      ["turn-from-first", "turn-from-second"]
+    );
+  });
+
   it("recovers from an orphaned temp file left by an interrupted write, without touching the real file", async () => {
     const dir = makeTempDir();
     const store = new TurnStore(dir);
@@ -226,10 +385,13 @@ describe("TurnStore", () => {
     const received: TurnRecord[][] = [];
     store.onDidChange((turns) => received.push(turns));
 
+    const recoveryPath = path.join(dir, "turns.json.recovery-old.bak");
+    fs.writeFileSync(recoveryPath, "old diagnostic copy", "utf8");
     await store.deleteAll();
 
     assert.deepStrictEqual(store.getAll(), []);
     assert.ok(!fs.existsSync(path.join(dir, "turns.json")), "turns.json should be deleted");
+    assert.ok(!fs.existsSync(recoveryPath), "recovery copies should be deleted");
     assert.strictEqual(received.length, 1);
     assert.deepStrictEqual(received[0], []);
 

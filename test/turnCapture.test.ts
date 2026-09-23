@@ -43,11 +43,18 @@ describe("turnCapture", () => {
 
     it("captures a Location-like reference value using its uri", () => {
       const fakeUri = { toString: () => "file:///tmp/example.ts" };
-      const fakeLocation = { uri: fakeUri, range: [0, 10] };
+      const fakeLocation = {
+        uri: fakeUri,
+        range: {
+          start: { line: 1, character: 2 },
+          end: { line: 3, character: 4 },
+        },
+      };
       const result = extractSupportedReferences([{ id: "ref-loc", value: fakeLocation }]);
       assert.strictEqual(result.length, 1);
       assert.strictEqual(result[0].kind, "location");
       assert.strictEqual(result[0].value, "file:///tmp/example.ts");
+      assert.deepStrictEqual(result[0].range, fakeLocation.range);
     });
 
     it("drops references with an unsupported/unknown value shape", () => {
