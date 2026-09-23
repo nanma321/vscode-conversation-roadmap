@@ -3,6 +3,18 @@
 All notable changes to the "Conversation Roadmap" extension are documented
 in this file.
 
+## [0.1.3] - 2026-09-23
+
+- Send bounded, ordered `@roadmap` request and Markdown response history to the
+  language model so short follow-ups retain their conversational context.
+- Keep the newest coherent exchanges and the active Resume seed when history
+  must be compacted, strip internal Resume markers, and avoid duplicating the
+  current request.
+- Keep interleaved chat sessions independent by carrying the roadmap session
+  identifier in public `ChatResult.metadata`.
+- Surface model and context-construction failures through the chat result while
+  continuing to preserve failed turns in the local transcript.
+
 ## [0.1.2] - 2026-09-18
 
 - Reworked the demo around the user problem and scenarios before the feature

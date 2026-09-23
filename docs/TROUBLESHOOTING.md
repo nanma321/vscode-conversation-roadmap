@@ -1,6 +1,6 @@
 # Troubleshooting & Known Limitations
 
-Conversation Roadmap 0.1.2 requires VS Code 1.137 or later. Older versions are
+Conversation Roadmap 0.1.3 requires VS Code 1.137 or later. Older versions are
 blocked at installation because their non-submitting chat-prefill behavior is
 not compatible with this release.
 
@@ -24,6 +24,23 @@ This is shown as a one-time onboarding notice the first time the extension
 activates (see **Conversation Roadmap: Show Onboarding and Known Limitations** to reopen
 it), and it is not a bug - it is the boundary of what the public chat API
 exposes.
+
+## A short follow-up behaves as if earlier messages were missing
+
+Version 0.1.3 and later sends the accessible `@roadmap` request/Markdown
+response history to the selected language model. History is explicitly bounded
+by message and character budgets: the newest coherent exchanges are retained,
+along with the active Resume seed and its response when continuing a branch.
+Buttons, file trees, anchors, metadata, and other non-text response parts are
+not converted into invented prompt text.
+
+VS Code's public chat API does not expose an opaque conversation identifier.
+Conversation Roadmap therefore returns its session identifier as JSON-safe
+`ChatResult.metadata` and recovers it from the next `ChatResponseTurn`. This
+keeps updated and interleaved chats separate. Responses created before version
+0.1.3 do not contain that metadata, so the first new turn in an already-open
+older chat can begin one new roadmap session segment; later turns in that chat
+remain stable.
 
 ## `@roadmap` disappears before my next question
 

@@ -7,6 +7,7 @@
 import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
+import { ROADMAP_PARTICIPANT_ID } from "../../src/chatSession";
 
 interface CommandContribution {
   command: string;
@@ -23,6 +24,7 @@ interface PackageJson {
   keywords?: string[];
   galleryBanner?: { color?: string; theme?: string };
   contributes?: {
+    chatParticipants?: Array<{ id?: string }>;
     commands?: CommandContribution[];
     configuration?: { properties?: Record<string, unknown> };
   };
@@ -72,6 +74,14 @@ describe("Marketplace metadata (Phase 10)", () => {
     assert.ok(
       commands.some((c) => c.command === "conversationRoadmap.showOnboarding"),
       "package.json must declare conversationRoadmap.showOnboarding"
+    );
+  });
+
+  it("keeps the participant contribution aligned with the runtime id", () => {
+    const participants = pkg.contributes?.chatParticipants ?? [];
+    assert.ok(
+      participants.some((participant) => participant.id === ROADMAP_PARTICIPANT_ID),
+      `package.json must contribute ${ROADMAP_PARTICIPANT_ID}`
     );
   });
 
