@@ -46,12 +46,12 @@ new, traceable branch.
 Export a JSON backup, Mermaid Markdown, or a standalone SVG. Share the shape of
 the conversation without taking screenshots of a 200-message chat.
 
-## Install the 0.1.2 beta
+## Install the 0.1.4 beta
 
 ### Download
 
 1. Download
-   [conversation-roadmap-0.1.2.vsix](https://github.com/nanma321/vscode-conversation-roadmap/releases/download/v0.1.2/conversation-roadmap-0.1.2.vsix).
+   [conversation-roadmap-0.1.4.vsix](https://github.com/nanma321/vscode-conversation-roadmap/releases/download/v0.1.4/conversation-roadmap-0.1.4.vsix).
 2. In VS Code, open the Extensions view.
 3. Open the `...` menu and select **Install from VSIX...**.
 4. Choose the downloaded file and reload VS Code when prompted.
@@ -59,7 +59,7 @@ the conversation without taking screenshots of a 200-message chat.
 Or install from a terminal:
 
 ```powershell
-code --install-extension conversation-roadmap-0.1.2.vsix
+code --install-extension conversation-roadmap-0.1.4.vsix
 ```
 
 ### Requirements
@@ -250,7 +250,7 @@ details, connection details, resume, merge, outline, and transcript states.
 
 ## Learn more
 
-- [Latest beta release](https://github.com/nanma321/vscode-conversation-roadmap/releases/tag/v0.1.2)
+- [Latest beta release](https://github.com/nanma321/vscode-conversation-roadmap/releases/tag/v0.1.4)
 - [Troubleshooting and known limitations](docs/TROUBLESHOOTING.md)
 - [Completed implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [Accessibility support](docs/ACCESSIBILITY.md)
