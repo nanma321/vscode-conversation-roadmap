@@ -303,6 +303,51 @@ describe("TurnStore", () => {
     ]);
   });
 
+  it("normalizes legacy private position fields in stored location references", async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "turns.json");
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        turns: [
+          {
+            ...sampleTurn({ id: "legacy-location" }),
+            references: [
+              {
+                id: "vscode.implicit.selection",
+                description: "selected code",
+                kind: "location",
+                value: "file:///tmp/example.ts",
+                range: {
+                  start: { _line: 131, _character: 38 },
+                  end: { _line: 132, _character: 40 },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      "utf8"
+    );
+
+    const turns = await new TurnStore(dir).load();
+
+    assert.deepStrictEqual(turns[0].references, [
+      {
+        id: "vscode.implicit.selection",
+        description: "selected code",
+        kind: "location",
+        value: "file:///tmp/example.ts",
+        range: {
+          start: { line: 131, character: 38 },
+          end: { line: 132, character: 40 },
+        },
+      },
+    ]);
+    assert.ok(!fs.existsSync(`${filePath}.blocked`));
+  });
+
   it("persists summarization attempt counts without emitting a transcript change", async () => {
     const dir = makeTempDir();
     const store = new TurnStore(dir);

@@ -132,16 +132,71 @@ function isStoredTurn(value: unknown): value is TurnRecord {
   );
 }
 
-function parseStoreFile(value: unknown): StoreFileShape {
+function normalizeLegacyStoredPosition(value: unknown): unknown {
   if (
     !isRecord(value) ||
-    value.version !== 1 ||
-    !Array.isArray(value.turns) ||
-    !value.turns.every(isStoredTurn)
+    value.line !== undefined ||
+    value.character !== undefined ||
+    !Number.isSafeInteger(value._line) ||
+    !Number.isSafeInteger(value._character)
+  ) {
+    return value;
+  }
+  const { _line, _character, ...position } = value;
+  return {
+    ...position,
+    line: _line,
+    character: _character,
+  };
+}
+
+function normalizeLegacyStoredReference(value: unknown): unknown {
+  if (
+    !isRecord(value) ||
+    value.kind !== "location" ||
+    !isRecord(value.range)
+  ) {
+    return value;
+  }
+  return {
+    ...value,
+    range: {
+      ...value.range,
+      start: normalizeLegacyStoredPosition(value.range.start),
+      end: normalizeLegacyStoredPosition(value.range.end),
+    },
+  };
+}
+
+function normalizeLegacyStoreFile(value: unknown): unknown {
+  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.turns)) {
+    return value;
+  }
+  return {
+    ...value,
+    turns: value.turns.map((turn) => {
+      if (!isRecord(turn) || !Array.isArray(turn.references)) {
+        return turn;
+      }
+      return {
+        ...turn,
+        references: turn.references.map(normalizeLegacyStoredReference),
+      };
+    }),
+  };
+}
+
+function parseStoreFile(value: unknown): StoreFileShape {
+  const normalized = normalizeLegacyStoreFile(value);
+  if (
+    !isRecord(normalized) ||
+    normalized.version !== 1 ||
+    !Array.isArray(normalized.turns) ||
+    !normalized.turns.every(isStoredTurn)
   ) {
     throw new Error("turns.json does not match the supported version 1 storage shape");
   }
-  return value as unknown as StoreFileShape;
+  return normalized as unknown as StoreFileShape;
 }
 
 /**

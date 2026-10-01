@@ -57,6 +57,48 @@ describe("turnCapture", () => {
       assert.deepStrictEqual(result[0].range, fakeLocation.range);
     });
 
+    it("serializes Position-like getters instead of enumerable private fields", () => {
+      class FakePosition {
+        readonly _line: number;
+        readonly _character: number;
+
+        constructor(line: number, character: number) {
+          this._line = line;
+          this._character = character;
+        }
+
+        get line(): number {
+          return this._line;
+        }
+
+        get character(): number {
+          return this._character;
+        }
+      }
+
+      const result = extractSupportedReferences([
+        {
+          id: "ref-loc",
+          value: {
+            uri: { toString: () => "file:///tmp/example.ts" },
+            range: {
+              start: new FakePosition(5, 6),
+              end: new FakePosition(7, 8),
+            },
+          },
+        },
+      ]);
+
+      assert.deepStrictEqual(result[0].range, {
+        start: { line: 5, character: 6 },
+        end: { line: 7, character: 8 },
+      });
+      assert.deepStrictEqual(Object.keys(result[0].range!.start), [
+        "line",
+        "character",
+      ]);
+    });
+
     it("drops references with an unsupported/unknown value shape", () => {
       const result = extractSupportedReferences([
         { id: "ref-unknown", value: { someRandomField: 42 } },

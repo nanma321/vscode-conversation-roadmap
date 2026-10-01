@@ -98,8 +98,14 @@ export function extractSupportedReferences(
         kind: "location",
         value: String(value.uri),
         range: {
-          start: { ...value.range.start },
-          end: { ...value.range.end },
+          start: {
+            line: value.range.start.line,
+            character: value.range.start.character,
+          },
+          end: {
+            line: value.range.end.line,
+            character: value.range.end.character,
+          },
         },
       });
     } else if (isUriLike(value)) {
